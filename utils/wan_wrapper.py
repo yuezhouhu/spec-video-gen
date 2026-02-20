@@ -27,10 +27,25 @@ class WanTextEncoder(torch.nn.Module):
             dtype=torch.float32,
             device=torch.device('cuda')
         ).eval().requires_grad_(False)
-        self.text_encoder.load_state_dict(
-            safe_load_file(os.path.join(MODEL_FOLDER, "Wan2.1-T2V-1.3B", "models_t5_umt5-xxl-enc-bf16.safetensors"),
-                       device='cuda')
-        )
+
+        base_dir = os.path.join(MODEL_FOLDER, "Wan2.1-T2V-1.3B")
+        ckpt_safetensors = os.path.join(base_dir, "models_t5_umt5-xxl-enc-bf16.safetensors")
+        ckpt_pth = os.path.join(base_dir, "models_t5_umt5-xxl-enc-bf16.pth")
+
+        if os.path.exists(ckpt_safetensors):
+            state_dict = safe_load_file(ckpt_safetensors, device="cuda")
+        elif os.path.exists(ckpt_pth):
+            loaded = torch.load(ckpt_pth, map_location="cpu", weights_only=False)
+            state_dict = loaded.get("state_dict", loaded) if isinstance(loaded, dict) else loaded
+        else:
+            raise FileNotFoundError(
+                "Text encoder checkpoint not found. Tried:\n"
+                f"  - {ckpt_safetensors}\n"
+                f"  - {ckpt_pth}\n"
+                "Please set MODEL_FOLDER to the directory that contains Wan2.1-T2V-1.3B."
+            )
+
+        self.text_encoder.load_state_dict(state_dict)
 
         self.tokenizer = HuggingfaceTokenizer(
             name=os.path.join(MODEL_FOLDER, "Wan2.1-T2V-1.3B", "google", "umt5-xxl/"), seq_len=512, clean='whitespace')
