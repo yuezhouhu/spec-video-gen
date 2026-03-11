@@ -150,7 +150,12 @@ def encode_video_latent(vae, encode_vae_cache, resample_to=16, max_frames=81, vi
     h = h // vae_stride[1] * vae_stride[1]
     w = w // vae_stride[2] * vae_stride[2]
 
-    frames = torch.nn.functional.interpolate(frames.cuda(), size=(h, w), mode='bicubic').transpose(0, 1).to(dtype)
+    # If frames are already on a specific GPU, use that device; otherwise move to cuda
+    if hasattr(frames, 'device') and frames.device.type == 'cuda':
+        frames_device = frames.device
+    else:
+        frames_device = torch.cuda.current_device()
+    frames = torch.nn.functional.interpolate(frames.to(frames_device), size=(h, w), mode='bicubic').transpose(0, 1).to(dtype)
     
     init_video_latents, encode_vae_cache = vae(frames.unsqueeze(0), encode_vae_cache, stream=stream)
     del frames

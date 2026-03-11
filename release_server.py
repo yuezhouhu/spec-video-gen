@@ -85,7 +85,11 @@ USE_STATIC_ENCODER_COND_DICT = os.getenv("USE_STATIC_ENCODER_COND_DICT", "false"
 DO_COMPILE = os.getenv("DO_COMPILE", "false").lower() in ("true", "1", "yes")
 print("DO_COMPILE", DO_COMPILE)
 
-gpu = torch.cuda.current_device()
+DIFFUSION_GPU = int(os.getenv("DIFFUSION_GPU", "0"))
+TEXT_VAE_GPU = DIFFUSION_GPU + 1
+print(f"Multi-GPU mode: diffusion={DIFFUSION_GPU}, text_vae={TEXT_VAE_GPU}")
+
+gpu = DIFFUSION_GPU
 upload_stream = torch.cuda.Stream(device=gpu)
 download_stream = torch.cuda.Stream(device=gpu)
 
@@ -111,10 +115,11 @@ class Models:
 def copy_models(models: Models, config, gpu):
     from copy import deepcopy
     with torch.cuda.device(gpu):
-        text_encoder = deepcopy(models.text_encoder).to(gpu)
-        transformer = deepcopy(models.transformer).to(gpu)
-        vae_encoder = deepcopy(models.vae_encoder).to(gpu)
-        vae_decoder = deepcopy(models.vae_decoder).to(gpu)
+        # Text encoder and VAE stay on TEXT_VAE_GPU, transformer on DIFFUSION_GPU
+        text_encoder = deepcopy(models.text_encoder).to(f"cuda:{TEXT_VAE_GPU}")
+        transformer = deepcopy(models.transformer).to(f"cuda:{DIFFUSION_GPU}")
+        vae_encoder = deepcopy(models.vae_encoder).to(f"cuda:{TEXT_VAE_GPU}")
+        vae_decoder = deepcopy(models.vae_decoder).to(f"cuda:{TEXT_VAE_GPU}")
         pipeline = load_pipeline(config, gpu, transformer, text_encoder, vae_decoder)
         return Models(text_encoder, transformer, pipeline, vae_encoder, vae_decoder)
 
@@ -140,6 +145,7 @@ def load_text_encoder():
     text_encoder.eval()
     text_encoder.to(dtype=torch.bfloat16)
     text_encoder.requires_grad_(False)
+    text_encoder.to(f"cuda:{TEXT_VAE_GPU}")
     
     t_finish = time.time()
     log.debug(f"Text encoder load completed in: {t_finish - t_import:.2f}s, total: {t_finish - t_start:.2f}s")
@@ -230,7 +236,7 @@ def load_transformer(config, meta_transformer=False):
     transformer = transformer.to(dtype=torch.bfloat16)
     transformer.eval()
     transformer.requires_grad_(False)
-    transformer.to(torch.cuda.current_device())
+    transformer.to(f"cuda:{DIFFUSION_GPU}")
 
     for block in transformer.model.blocks:
         block.self_attn.fuse_projections()
@@ -256,7 +262,7 @@ def load_vae():
     from demo_utils.vae_block3 import VAEDecoderWrapper
     vae_dtype = torch.float16
     vae_path = os.path.join(MODEL_FOLDER, "Wan2.1-T2V-1.3B", "Wan2.1_VAE.pth")
-    vae = WanVAE(vae_pth=vae_path, dtype=vae_dtype, device="cuda:1")
+    vae = WanVAE(vae_pth=vae_path, dtype=vae_dtype, device=f"cuda:{TEXT_VAE_GPU}")
     vae_encoder = VAEEncoderWrapper(vae)
 
     vae_decoder = VAEDecoderWrapper()
@@ -269,14 +275,14 @@ def load_vae():
     vae_encoder.eval()
     vae_encoder.to(dtype=torch.float16)
     vae_encoder.requires_grad_(False)
-    vae_encoder.to("cuda:1")
+    vae_encoder.to(f"cuda:{TEXT_VAE_GPU}")
 
     keys = vae_decoder.load_state_dict(decoder_state_dict, strict=False)
     print(f"Incompatible {keys} while loading vae decoder")
     vae_decoder.eval()
     vae_decoder.to(dtype=torch.float16)
     vae_decoder.requires_grad_(False)
-    vae_decoder.to("cuda:1")
+    vae_decoder.to(f"cuda:{TEXT_VAE_GPU}")
 
     t_finish = time.time()
     log.debug(f"VAE load completed in: {t_finish - t_start:.2f}s")
@@ -294,7 +300,7 @@ def load_pipeline(config, device, transformer, text_encoder, vae_decoder):
     
     pipeline = CausalInferencePipeline(
         config,
-        device=device,
+        device=f"cuda:{DIFFUSION_GPU}",
         generator=transformer,
         text_encoder=text_encoder,
         vae=vae_decoder
@@ -357,7 +363,6 @@ def load_all(config: OmegaConf, meta_transformer=False):
         pbar.update(1)
 
     print(torch.cuda.memory_allocated() / 1024**3)
-    exit()
 
     t_total_end = time.time()
     log.info(f"All models loaded successfully in {t_total_end - t_total_start:.2f}s")
@@ -521,11 +526,11 @@ class GenerationSession:
     def interpolate_prompt_embeds(self, models: Models, new_prompt, interpolation_steps):
         if self.current_prompt_embeds is None: return
         prompt_embeds_1 = self.current_prompt_embeds
-        prompt_embeds_2 = models.text_encoder(text_prompts=[new_prompt])["prompt_embeds"].to(dtype=torch.bfloat16)
+        prompt_embeds_2 = models.text_encoder(text_prompts=[new_prompt])["prompt_embeds"].to(dtype=torch.bfloat16, device=f"cuda:{DIFFUSION_GPU}")
         x = torch.lerp(
-            prompt_embeds_1,
+            prompt_embeds_1.to(f"cuda:{DIFFUSION_GPU}"),
             prompt_embeds_2,
-            torch.linspace(0, 1, steps=interpolation_steps).unsqueeze(1).unsqueeze(2).to(prompt_embeds_1)
+            torch.linspace(0, 1, steps=interpolation_steps).unsqueeze(1).unsqueeze(2).to(prompt_embeds_1.device)
         )
         self.interpolated_prompt_embeds = list(x.chunk(interpolation_steps, dim=0))
 
@@ -577,6 +582,9 @@ class GenerationSession:
 
         frames_tensor = torch.stack(frames_to_encode)
 
+        # Move frames to VAE GPU for encoding
+        frames_tensor = frames_tensor.to(f"cuda:{TEXT_VAE_GPU}")
+
         latents, self.encode_vae_cache = encode_video_latent(
             models.vae_encoder,
             self.encode_vae_cache,
@@ -586,7 +594,8 @@ class GenerationSession:
             stream=idx > 0,
         )
 
-        return latents
+        # Move latents back to diffusion GPU
+        return latents.to(f"cuda:{DIFFUSION_GPU}")
 
     @lru_cache(maxsize=32)
     def encode_v2v(self, video_path_or_url: str, max_frames=None, resample_to=None):
@@ -599,7 +608,8 @@ class GenerationSession:
                                     max_frames=max_frames,
                                     resample_to=resample_to,
                                     )
-        return latents
+        # Move latents back to diffusion GPU
+        return latents.to(f"cuda:{DIFFUSION_GPU}")
 
     def init_models(self, models: Models, params: GenerateParams):
         attn_size = self.params.kv_cache_num_frames + models.pipeline.num_frame_per_block
@@ -633,7 +643,10 @@ class GenerationSession:
         else:
             # print("reencoding first latent frame, block idx:")
             clean_context_frames = clean_context_frames[:,1:][:, -current_kv_cache_num_frames + 1:]
-            first_frame_latent = encode_video_latent(models.vae_encoder, [None]*55, resample_to=16, max_frames=81, video_path_or_url=None, frames=self.frame_context_cache[0][0].half(), height=480, width=832, stream=False,)[0].transpose(0, 1)[None]
+            # Move frames to VAE GPU for encoding
+            frame_for_vae = self.frame_context_cache[0][0].half().to(f"cuda:{TEXT_VAE_GPU}")
+            first_frame_latent = encode_video_latent(models.vae_encoder, [None]*55, resample_to=16, max_frames=81, video_path_or_url=None, frames=frame_for_vae, height=480, width=832, stream=False,)[0].transpose(0, 1)[None]
+            first_frame_latent = first_frame_latent.to(f"cuda:{DIFFUSION_GPU}")
             clean_context_frames = torch.cat((first_frame_latent, clean_context_frames), dim=1).to(self.all_latents)
         return clean_context_frames
 
@@ -683,9 +696,15 @@ class GenerationSession:
             device=clean_context_frames.device,
             dtype=torch.int64) * 0
         models.pipeline.generator.model.block_mask = block_mask
+        
+        # Move conditional_dict to diffusion GPU
+        conditional_dict_gpu0 = {}
+        for key, value in self.conditional_dict.items():
+            conditional_dict_gpu0[key] = value.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
+        
         models.transformer(
             noisy_image_or_video=clean_context_frames,
-            conditional_dict=self.conditional_dict,
+            conditional_dict=conditional_dict_gpu0,
             timestep=context_timestep,
             kv_cache=models.pipeline.kv_cache1,
             crossattn_cache=models.pipeline.crossattn_cache,
@@ -727,21 +746,26 @@ class GenerationSession:
             self.current_prompt_embeds = next_interpolated_text_emb.to(
                 dtype=self.current_prompt_embeds.dtype, device=self.current_prompt_embeds.device)
 
+        # Move conditional_dict to diffusion GPU for transformer
+        conditional_dict_gpu0 = {}
+        for key, value in self.conditional_dict.items():
+            conditional_dict_gpu0[key] = value.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
+
         # This is set from config
         for index, current_timestep in enumerate(self.denoising_step_list):
             if self.disposed.is_set(): return
             t_step_start = time.time()
             # Normal initialize timestamp stuff
-            timestep = torch.ones([1, models.pipeline.num_frame_per_block], device=self.noise.device,
+            timestep = torch.ones([1, models.pipeline.num_frame_per_block], device=noisy_input.device,
                                 dtype=torch.int64) * current_timestep
 
-            self.conditional_dict['prompt_embeds'] = self.current_prompt_embeds
+            conditional_dict_gpu0['prompt_embeds'] = self.current_prompt_embeds.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
 
             if index < len(self.denoising_step_list) - 1:
                 start_time = time.time()
                 _, denoised_pred = models.transformer(
                     noisy_image_or_video=noisy_input,
-                    conditional_dict=self.conditional_dict,
+                    conditional_dict=conditional_dict_gpu0,
                     timestep=timestep,
                     kv_cache=models.pipeline.kv_cache1,
                     crossattn_cache=models.pipeline.crossattn_cache,
@@ -752,7 +776,7 @@ class GenerationSession:
                 noisy_input = models.pipeline.scheduler.add_noise(
                     denoised_pred.flatten(0, 1),
                     torch.randn(*denoised_pred.flatten(0, 1).shape, generator=self.rnd, device=denoised_pred.device, dtype=torch.bfloat16),
-                    next_timestep * torch.ones([1 * models.pipeline.num_frame_per_block], device=self.noise.device, dtype=torch.long, )
+                    next_timestep * torch.ones([1 * models.pipeline.num_frame_per_block], device=noisy_input.device, dtype=torch.long, )
                 ).unflatten(0, denoised_pred.shape[:2])
                 # logging.debug("(renoise) time %f", time.time() - start_time)
             else:
@@ -760,7 +784,7 @@ class GenerationSession:
                 # otherwise just denoise
                 _, denoised_pred = models.transformer(
                     noisy_image_or_video=noisy_input,
-                    conditional_dict=self.conditional_dict,
+                    conditional_dict=conditional_dict_gpu0,
                     timestep=timestep,
                     kv_cache=models.pipeline.kv_cache1,
                     crossattn_cache=models.pipeline.crossattn_cache,
@@ -778,7 +802,11 @@ class GenerationSession:
             ctx = torch.compiler.set_stance("default")
 
         with ctx:
-            pixels, self.decode_vae_cache = models.vae_decoder(denoised_pred.half(), *self.decode_vae_cache)
+            # Move denoised_pred to VAE GPU for decoding
+            denoised_pred_vae = denoised_pred.to(f"cuda:{TEXT_VAE_GPU}", non_blocking=True).half()
+            pixels, self.decode_vae_cache = models.vae_decoder(denoised_pred_vae, *self.decode_vae_cache)
+            # Move pixels back to diffusion GPU
+            pixels = pixels.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
 
         self.frame_context_cache.extend(pixels.split(1, dim=1))
         if idx == 0:
