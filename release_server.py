@@ -206,7 +206,7 @@ def load_transformer(config, meta_transformer=False):
     log.debug(f"Transformer import took: {t_import - t_start:.2f}s")
 
     log.debug(f"Loading transformer checkpoint from {checkpoint_path}")
-    state_dict = _load_state_dict_auto(checkpoint_path, device="cuda")
+    state_dict = _load_state_dict_auto(checkpoint_path, device="cpu")
 
     # If torch.load returned CPU tensors, that's fine: load_state_dict then move module to GPU below.
     # Decide model variant by inspecting a key if present.
@@ -256,7 +256,7 @@ def load_vae():
     from demo_utils.vae_block3 import VAEDecoderWrapper
     vae_dtype = torch.float16
     vae_path = os.path.join(MODEL_FOLDER, "Wan2.1-T2V-1.3B", "Wan2.1_VAE.pth")
-    vae = WanVAE(vae_pth=vae_path, dtype=vae_dtype)
+    vae = WanVAE(vae_pth=vae_path, dtype=vae_dtype, device="cuda:1")
     vae_encoder = VAEEncoderWrapper(vae)
 
     vae_decoder = VAEDecoderWrapper()
@@ -269,14 +269,14 @@ def load_vae():
     vae_encoder.eval()
     vae_encoder.to(dtype=torch.float16)
     vae_encoder.requires_grad_(False)
-    vae_encoder.to(torch.cuda.current_device())
+    vae_encoder.to("cuda:1")
 
     keys = vae_decoder.load_state_dict(decoder_state_dict, strict=False)
     print(f"Incompatible {keys} while loading vae decoder")
     vae_decoder.eval()
     vae_decoder.to(dtype=torch.float16)
     vae_decoder.requires_grad_(False)
-    vae_decoder.to(torch.cuda.current_device())
+    vae_decoder.to("cuda:1")
 
     t_finish = time.time()
     log.debug(f"VAE load completed in: {t_finish - t_start:.2f}s")
@@ -355,7 +355,10 @@ def load_all(config: OmegaConf, meta_transformer=False):
         pipeline = load_pipeline(config, torch.cuda.current_device(), transformer, text_encoder, vae_decoder)
         log.debug(f"Initializing pipeline took: {time.time() - t_stage_start:.2f}s")
         pbar.update(1)
-    
+
+    print(torch.cuda.memory_allocated() / 1024**3)
+    exit()
+
     t_total_end = time.time()
     log.info(f"All models loaded successfully in {t_total_end - t_total_start:.2f}s")
     

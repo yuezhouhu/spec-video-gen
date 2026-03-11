@@ -215,6 +215,10 @@ class CausalWanSelfAttention(nn.Module):
         )
         self.fused_projections = True
 
+        del self.q
+        del self.k
+        del self.v
+
     def forward(
         self,
         x,

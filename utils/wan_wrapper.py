@@ -25,7 +25,7 @@ class WanTextEncoder(torch.nn.Module):
             encoder_only=True,
             return_tokenizer=False,
             dtype=torch.float32,
-            device=torch.device('cuda')
+            device=torch.device('cuda:1')
         ).eval().requires_grad_(False)
 
         base_dir = os.path.join(MODEL_FOLDER, "Wan2.1-T2V-1.3B")
@@ -33,7 +33,7 @@ class WanTextEncoder(torch.nn.Module):
         ckpt_pth = os.path.join(base_dir, "models_t5_umt5-xxl-enc-bf16.pth")
 
         if os.path.exists(ckpt_safetensors):
-            state_dict = safe_load_file(ckpt_safetensors, device="cuda")
+            state_dict = safe_load_file(ckpt_safetensors, device="cuda:1")
         elif os.path.exists(ckpt_pth):
             loaded = torch.load(ckpt_pth, map_location="cpu", weights_only=False)
             state_dict = loaded.get("state_dict", loaded) if isinstance(loaded, dict) else loaded
@@ -53,7 +53,7 @@ class WanTextEncoder(torch.nn.Module):
     @property
     def device(self):
         # Assume we are always on GPU
-        return torch.cuda.current_device()
+        return "cuda:1"
 
     def forward(self, text_prompts: List[str]) -> dict:
         stime = time.time()
