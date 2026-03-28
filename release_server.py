@@ -105,9 +105,10 @@ class Models:
     """
     Wrapper class that holds all loaded models
     """
-    def __init__(self, text_encoder, transformer, pipeline, vae_encoder, vae_decoder):
+    def __init__(self, text_encoder, transformer, drafter, pipeline, vae_encoder, vae_decoder):
         self.text_encoder: WanTextEncoder = text_encoder
         self.transformer: WanDiffusionWrapper = transformer
+        self.drafter: WanDiffusionWrapper = drafter
         self.pipeline: CausalInferencePipeline = pipeline
         self.vae_encoder: VAEEncoderWrapper = vae_encoder
         self.vae_decoder: VAEDecoderWrapper = vae_decoder
@@ -201,6 +202,53 @@ def _load_state_dict_auto(checkpoint_path: str | Path, device: str = "cuda") -> 
         f"Supported: .safetensors/.sft/.pt/.pth"
     )
 
+def load_drafter(config):
+    """Load and configure the drafter model (smaller transformer for fast prediction)"""
+    t_start = time.time()
+
+    # Extract drafter config
+    checkpoint_path = config.drafter_checkpoint_path
+
+    from utils.wan_wrapper import WanDiffusionWrapper
+
+    log.debug(f"Loading drafter checkpoint from {checkpoint_path}")
+    state_dict = _load_state_dict_auto(checkpoint_path, device="cpu")
+
+    try:
+        k0 = state_dict["model.blocks.0.self_attn.k.weight"]
+    except KeyError as e:
+        raise RuntimeError(
+            "Checkpoint is missing expected key 'model.blocks.0.self_attn.k.weight'. "
+            "This usually means you loaded the wrong file or the state_dict key-prefix differs."
+        ) from e
+
+    if k0.shape[0] == 1536:
+        model_name = "Wan2.1-T2V-1.3B"
+    else:
+        model_name = "Wan2.1-T2V-14B"
+
+    timestep_shift = getattr(config, "timestep_shift", 5.0)
+    drafter = WanDiffusionWrapper(model_name=model_name, timestep_shift=timestep_shift, is_causal=True)
+    drafter.load_state_dict(state_dict)
+
+    drafter = drafter.to(dtype=torch.bfloat16)
+    drafter.eval()
+    drafter.requires_grad_(False)
+    drafter.to(f"cuda:{DIFFUSION_GPU}")
+
+    # Optional: fuse projections for speed
+    for block in drafter.model.blocks:
+        block.self_attn.fuse_projections()
+
+    if config.enable_fp8:
+        log.debug("Quantizing drafter to fp8")
+        from torchao.quantization.quant_api import quantize_, Float8DynamicActivationFloat8WeightConfig, PerTensor
+        quantize_(drafter, Float8DynamicActivationFloat8WeightConfig(granularity=PerTensor()))
+
+    t_finish = time.time()
+    log.debug(f"Drafter load completed in: {t_finish - t_start:.2f}s")
+    return drafter
+
 def load_transformer(config, meta_transformer=False):
     """Load and configure the transformer model"""
     t_start = time.time()
@@ -290,7 +338,7 @@ def load_vae():
     return vae_encoder, vae_decoder
 
 
-def load_pipeline(config, device, transformer, text_encoder, vae_decoder):
+def load_pipeline(config, device, transformer, drafter, text_encoder, vae_decoder):
     """Initialize the causal inference pipeline"""
     t_start = time.time()
     
@@ -302,6 +350,7 @@ def load_pipeline(config, device, transformer, text_encoder, vae_decoder):
         config,
         device=f"cuda:{DIFFUSION_GPU}",
         generator=transformer,
+        drafter=drafter,
         text_encoder=text_encoder,
         vae=vae_decoder
     )
@@ -331,12 +380,19 @@ def load_all(config: OmegaConf, meta_transformer=False):
     
     
     # Create progress bar with 4 stages
-    with tqdm(total=4, desc="Loading models") as pbar:
+    with tqdm(total=5, desc="Loading models") as pbar:
         # Load transformer
         pbar.set_description("Loading transformer")
         t_stage_start = time.time()
         transformer = load_transformer(config)
         log.debug(f"Loading transformer took: {time.time() - t_stage_start:.2f}s")
+        pbar.update(1)
+
+        # Load drafter (smaller transformer for fast prediction)
+        pbar.set_description("Loading drafter")
+        t_stage_start = time.time()
+        drafter = load_drafter(config)
+        log.debug(f"Loading drafter took: {time.time() - t_stage_start:.2f}s")
         pbar.update(1)
 
         # Load text encoder
@@ -358,16 +414,14 @@ def load_all(config: OmegaConf, meta_transformer=False):
         # Initialize pipeline
         pbar.set_description("Initializing pipeline")
         t_stage_start = time.time()
-        pipeline = load_pipeline(config, torch.cuda.current_device(), transformer, text_encoder, vae_decoder)
+        pipeline = load_pipeline(config, torch.cuda.current_device(), transformer, drafter, text_encoder, vae_decoder)
         log.debug(f"Initializing pipeline took: {time.time() - t_stage_start:.2f}s")
         pbar.update(1)
-
-    print(torch.cuda.memory_allocated() / 1024**3)
 
     t_total_end = time.time()
     log.info(f"All models loaded successfully in {t_total_end - t_total_start:.2f}s")
     
-    models = Models(text_encoder, transformer, pipeline, vae_encoder, vae_decoder)
+    models = Models(text_encoder, transformer, drafter, pipeline, vae_encoder, vae_decoder)
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -620,6 +674,8 @@ class GenerationSession:
             block.self_attn.local_attn_size = -1
         models.pipeline._initialize_kv_cache(batch_size=1, dtype=torch.bfloat16, device=gpu)
         models.pipeline._initialize_crossattn_cache(batch_size=1, dtype=torch.bfloat16, device=gpu)
+        models.pipeline._initialize_drafter_kv_cache(batch_size=1, dtype=torch.bfloat16, device=gpu)
+        models.pipeline._initialize_drafter_crossattn_cache(batch_size=1, dtype=torch.bfloat16, device=gpu)
         models.pipeline.generator.model.block_mask = None
 
 
@@ -663,7 +719,9 @@ class GenerationSession:
     def recompute_kv_cache(self, models: Models):
         if self.block_idx == 0:
             models.pipeline._initialize_kv_cache(batch_size=1, dtype=torch.bfloat16, device=self.gpu)
+            models.pipeline._initialize_drafter_kv_cache(batch_size=1, dtype=torch.bfloat16, device=self.gpu)
             if self.resume_latents is not None:
+                raise NotImplementedError
                 print("Resuming generation from latents, shape", self.resume_latents.shape)
                 self.current_start_frame = self.resume_latents.shape[1]
                 self.all_latents[:, :self.current_start_frame] = self.resume_latents
@@ -682,6 +740,9 @@ class GenerationSession:
         models.pipeline._initialize_kv_cache(
             batch_size=clean_context_frames.shape[0], dtype=clean_context_frames.dtype, device=clean_context_frames.device
         )
+        models.pipeline._initialize_drafter_kv_cache(
+            batch_size=clean_context_frames.shape[0], dtype=clean_context_frames.dtype, device=clean_context_frames.device
+        )
 
         block_mask = models.pipeline.generator.model._prepare_blockwise_causal_attn_mask(
             device=str(clean_context_frames.device),
@@ -696,7 +757,8 @@ class GenerationSession:
             device=clean_context_frames.device,
             dtype=torch.int64) * 0
         models.pipeline.generator.model.block_mask = block_mask
-        
+        models.pipeline.drafter.model.block_mask = block_mask
+
         # Move conditional_dict to diffusion GPU
         conditional_dict_gpu0 = {}
         for key, value in self.conditional_dict.items():
@@ -711,6 +773,16 @@ class GenerationSession:
             current_start=model_input_start_frame * models.pipeline.frame_seq_length,
         )
         models.pipeline.generator.model.block_mask = None
+
+        models.drafter(
+            noisy_image_or_video=clean_context_frames,
+            conditional_dict=conditional_dict_gpu0,
+            timestep=context_timestep,
+            kv_cache=models.pipeline.drafter_kv_cache,
+            crossattn_cache=models.pipeline.drafter_crossattn_cache,
+            current_start=model_input_start_frame * models.pipeline.frame_seq_length,
+        )
+        models.pipeline.drafter.model.block_mask = None
         return model_input_start_frame
 
     @torch.inference_mode()
@@ -730,6 +802,7 @@ class GenerationSession:
         frame_ids: list[str | None] = []
 
         if self.params.webcam_mode:
+            raise NotImplementedError
             latents = self.process_webcam_frames(models, idx)
             if latents is None:
                 return None
@@ -741,7 +814,9 @@ class GenerationSession:
             noisy_input = self.noise[:, self.current_start_frame:self.current_start_frame + models.pipeline.num_frame_per_block]
 
         if self.interpolated_prompt_embeds:
+            raise NotImplementedError
             models.pipeline._initialize_crossattn_cache(batch_size=1, dtype=torch.bfloat16, device=self.gpu)
+            models.pipeline._initialize_drafter_crossattn_cache(batch_size=1, dtype=torch.bfloat16, device=self.gpu)
             next_interpolated_text_emb = self.interpolated_prompt_embeds.pop(0)
             self.current_prompt_embeds = next_interpolated_text_emb.to(
                 dtype=self.current_prompt_embeds.dtype, device=self.current_prompt_embeds.device)
@@ -763,12 +838,12 @@ class GenerationSession:
 
             if index < len(self.denoising_step_list) - 1:
                 start_time = time.time()
-                _, denoised_pred = models.transformer(
+                _, denoised_pred = models.drafter(
                     noisy_image_or_video=noisy_input,
                     conditional_dict=conditional_dict_gpu0,
                     timestep=timestep,
-                    kv_cache=models.pipeline.kv_cache1,
-                    crossattn_cache=models.pipeline.crossattn_cache,
+                    kv_cache=models.pipeline.drafter_kv_cache,
+                    crossattn_cache=models.pipeline.drafter_crossattn_cache,
                     current_start=model_input_start_frame * models.pipeline.frame_seq_length
                 )
                 start_time = time.time()
@@ -782,12 +857,12 @@ class GenerationSession:
             else:
                 start_time = time.time()
                 # otherwise just denoise
-                _, denoised_pred = models.transformer(
+                _, denoised_pred = models.drafter(
                     noisy_image_or_video=noisy_input,
                     conditional_dict=conditional_dict_gpu0,
                     timestep=timestep,
-                    kv_cache=models.pipeline.kv_cache1,
-                    crossattn_cache=models.pipeline.crossattn_cache,
+                    kv_cache=models.pipeline.drafter_kv_cache,
+                    crossattn_cache=models.pipeline.drafter_crossattn_cache,
                     current_start=model_input_start_frame * models.pipeline.frame_seq_length
                 )
 

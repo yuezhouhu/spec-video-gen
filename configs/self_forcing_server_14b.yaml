@@ -19,6 +19,7 @@ load_raw_video: false
 model_kwargs:
   timestep_shift: 5.0
 checkpoint_path: "checkpoints/krea-realtime-video-14b.safetensors"
+drafter_checkpoint_path: "checkpoints/self_forcing_dmd.pt"
 use_trt: false
 use_taehv: false
 enable_fp8: false

@@ -12,6 +12,7 @@ class CausalInferencePipeline(torch.nn.Module):
             args,
             device,
             generator=None,
+            drafter=None,
             text_encoder=None,
             vae=None
     ):
@@ -19,6 +20,7 @@ class CausalInferencePipeline(torch.nn.Module):
         # Step 1: Initialize all models
         self.generator = WanDiffusionWrapper(
             **getattr(args, "model_kwargs", {}), is_causal=True) if generator is None else generator
+        self.drafter = drafter  # NEW: keep a handle to the small draft model (can be None)
         self.text_encoder = WanTextEncoder() if text_encoder is None else text_encoder
         self.vae = WanVAEWrapper() if vae is None else vae
 
@@ -35,6 +37,8 @@ class CausalInferencePipeline(torch.nn.Module):
         self.frame_seq_length = 1560
 
         self.kv_cache1 = None
+        self.drafter_kv_cache = None
+        self.drafter_crossattn_cache = None
         self.args = args
         self.num_frame_per_block = getattr(args, "num_frame_per_block", 1)
         self.independent_first_frame = args.independent_first_frame
@@ -54,6 +58,7 @@ class CausalInferencePipeline(torch.nn.Module):
         profile: bool = False,
         low_memory: bool = False,
     ) -> torch.Tensor:
+        raise NotImplementedError
         """
         Perform inference on the given noise and text prompts.
         Inputs:
@@ -337,3 +342,68 @@ class CausalInferencePipeline(torch.nn.Module):
                     "is_init": False
                 })
             self.crossattn_cache = crossattn_cache
+
+    def _initialize_drafter_kv_cache(self, batch_size, dtype, device):
+        """
+        Initialize a Per-GPU KV cache for the drafter model.
+        """
+        if self.drafter is None:
+            return
+        
+        drafter_kv_cache = []
+        if self.local_attn_size != -1:
+            kv_cache_size = self.local_attn_size * self.frame_seq_length
+        else:
+            kv_cache_size = 32760
+
+        num_heads = self.drafter.model.config.num_heads
+        dim = self.drafter.model.config.dim
+        k_shape = [batch_size, kv_cache_size, num_heads, dim // num_heads]
+        v_shape = [batch_size, kv_cache_size, num_heads, dim // num_heads]
+
+        if self.drafter_kv_cache and list(self.drafter_kv_cache[0]["k"].shape) == k_shape and list(self.drafter_kv_cache[0]["v"].shape) == v_shape:
+            print("Zero reinitialization of drafter kv cache")
+            for i in range(self.num_transformer_blocks):
+                self.drafter_kv_cache[i]["k"].zero_()
+                self.drafter_kv_cache[i]["v"].zero_()
+                self.drafter_kv_cache[i]["global_end_index"] = 0
+                self.drafter_kv_cache[i]["local_end_index"] = 0
+        else:
+            print("Initializing drafter kv cache with shape: ", k_shape)
+            for _ in range(self.num_transformer_blocks):
+                drafter_kv_cache.append({
+                    "k": torch.zeros(k_shape, dtype=dtype, device=device).contiguous(),
+                    "v": torch.zeros(v_shape, dtype=dtype, device=device).contiguous(),
+                    "global_end_index": 0,
+                    "local_end_index": 0
+                })
+            self.drafter_kv_cache = drafter_kv_cache
+
+    def _initialize_drafter_crossattn_cache(self, batch_size, dtype, device):
+        """
+        Initialize a Per-GPU cross-attention cache for the drafter model.
+        """
+        if self.drafter is None:
+            return
+        
+        drafter_crossattn_cache = []
+
+        num_heads = self.drafter.model.config.num_heads
+        dim = self.drafter.model.config.dim
+        k_shape = [batch_size, 512, num_heads, dim // num_heads]
+        v_shape = [batch_size, 512, num_heads, dim // num_heads]
+        
+        if hasattr(self, 'drafter_crossattn_cache') and self.drafter_crossattn_cache and list(self.drafter_crossattn_cache[0]["k"].shape) == k_shape and list(self.drafter_crossattn_cache[0]["v"].shape) == v_shape:
+            print("Zero reinitialization of drafter crossattn cache")
+            for i in range(self.num_transformer_blocks):
+                self.drafter_crossattn_cache[i]["k"].zero_()
+                self.drafter_crossattn_cache[i]["v"].zero_()
+                self.drafter_crossattn_cache[i]["is_init"] = False
+        else:
+            for _ in range(self.num_transformer_blocks):
+                drafter_crossattn_cache.append({
+                    "k": torch.zeros(k_shape, dtype=dtype, device=device).contiguous(),
+                    "v": torch.zeros(v_shape, dtype=dtype, device=device).contiguous(),
+                    "is_init": False
+                })
+            self.drafter_crossattn_cache = drafter_crossattn_cache
