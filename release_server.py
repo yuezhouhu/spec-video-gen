@@ -811,7 +811,7 @@ class GenerationSession:
             latents = latents[None].to("cuda", dtype=self.noise.dtype).movedim(1, 2)
             noisy_input = latents * (1.0 - denoising_strength_scaled) + torch.randn_like(latents) * denoising_strength_scaled
         else:
-            noisy_input = self.noise[:, self.current_start_frame:self.current_start_frame + models.pipeline.num_frame_per_block]
+            original_noisy_input = self.noise[:, self.current_start_frame:self.current_start_frame + models.pipeline.num_frame_per_block]
 
         if self.interpolated_prompt_embeds:
             raise NotImplementedError
@@ -827,17 +827,25 @@ class GenerationSession:
             conditional_dict_gpu0[key] = value.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
 
         # This is set from config
-        for index, current_timestep in enumerate(self.denoising_step_list):
+        noisy_input = original_noisy_input.clone()
+
+        # Pre-sample per-step noises so drafter and transformer (on reject) follow the same stochastic path.
+        # Shape should match denoised_pred.flatten(0, 1) at each step: [B*F, C, H, W]
+        # Here B=1, F=num_frame_per_block.
+        step_noises = []
+        for _ in range(len(self.denoising_step_list) - 1):
+            step_noises.append(
+                torch.randn(*noisy_input.flatten(0, 1).shape, generator=self.rnd, device=noisy_input.device,
+                        dtype=torch.bfloat16),
+            )
+
+        for index, current_timestep in enumerate(self.denoising_step_list): # [1000.0000,  937.5000,  833.3333,  625.0000,    0.0000]
             if self.disposed.is_set(): return
-            t_step_start = time.time()
             # Normal initialize timestamp stuff
             timestep = torch.ones([1, models.pipeline.num_frame_per_block], device=noisy_input.device,
                                 dtype=torch.int64) * current_timestep
-
             conditional_dict_gpu0['prompt_embeds'] = self.current_prompt_embeds.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
-
             if index < len(self.denoising_step_list) - 1:
-                start_time = time.time()
                 _, denoised_pred = models.drafter(
                     noisy_image_or_video=noisy_input,
                     conditional_dict=conditional_dict_gpu0,
@@ -846,17 +854,13 @@ class GenerationSession:
                     crossattn_cache=models.pipeline.drafter_crossattn_cache,
                     current_start=model_input_start_frame * models.pipeline.frame_seq_length
                 )
-                start_time = time.time()
                 next_timestep = self.denoising_step_list[index + 1]
                 noisy_input = models.pipeline.scheduler.add_noise(
                     denoised_pred.flatten(0, 1),
-                    torch.randn(*denoised_pred.flatten(0, 1).shape, generator=self.rnd, device=denoised_pred.device, dtype=torch.bfloat16),
+                    step_noises[index],
                     next_timestep * torch.ones([1 * models.pipeline.num_frame_per_block], device=noisy_input.device, dtype=torch.long, )
                 ).unflatten(0, denoised_pred.shape[:2])
-                # logging.debug("(renoise) time %f", time.time() - start_time)
             else:
-                start_time = time.time()
-                # otherwise just denoise
                 _, denoised_pred = models.drafter(
                     noisy_image_or_video=noisy_input,
                     conditional_dict=conditional_dict_gpu0,
@@ -866,9 +870,66 @@ class GenerationSession:
                     current_start=model_input_start_frame * models.pipeline.frame_seq_length
                 )
 
+        accept = torch.rand((), device=noisy_input.device) < 0.5
+
+        if not accept:
+            noisy_input = original_noisy_input.clone()
+            for index, current_timestep in enumerate(
+                    self.denoising_step_list):  # [1000.0000,  937.5000,  833.3333,  625.0000,    0.0000]
+                if self.disposed.is_set(): return
+                # Normal initialize timestamp stuff
+                timestep = torch.ones([1, models.pipeline.num_frame_per_block], device=noisy_input.device,
+                                      dtype=torch.int64) * current_timestep
+                conditional_dict_gpu0['prompt_embeds'] = self.current_prompt_embeds.to(f"cuda:{DIFFUSION_GPU}",
+                                                                                       non_blocking=True)
+                if index < len(self.denoising_step_list) - 1:
+                    _, denoised_pred = models.transformer(
+                        noisy_image_or_video=noisy_input,
+                        conditional_dict=conditional_dict_gpu0,
+                        timestep=timestep,
+                        kv_cache=models.pipeline.kv_cache1,
+                        crossattn_cache=models.pipeline.crossattn_cache,
+                        current_start=model_input_start_frame * models.pipeline.frame_seq_length
+                    )
+                    next_timestep = self.denoising_step_list[index + 1]
+                    noisy_input = models.pipeline.scheduler.add_noise(
+                        denoised_pred.flatten(0, 1),
+                        step_noises[index],
+                        next_timestep * torch.ones([1 * models.pipeline.num_frame_per_block], device=noisy_input.device, dtype=torch.long, )
+                    ).unflatten(0, denoised_pred.shape[:2])
+                else:
+                    _, denoised_pred = models.transformer(
+                        noisy_image_or_video=noisy_input,
+                        conditional_dict=conditional_dict_gpu0,
+                        timestep=timestep,
+                        kv_cache=models.pipeline.kv_cache1,
+                        crossattn_cache=models.pipeline.crossattn_cache,
+                        current_start=model_input_start_frame * models.pipeline.frame_seq_length
+                    )
+            # timestep = torch.ones([1, models.pipeline.num_frame_per_block], device=noisy_input.device,
+            #                       dtype=torch.int64) * 0
+            # models.drafter(
+            #     noisy_image_or_video=denoised_pred,
+            #     conditional_dict=conditional_dict_gpu0,
+            #     timestep=timestep,
+            #     kv_cache=models.pipeline.drafter_kv_cache,
+            #     crossattn_cache=models.pipeline.drafter_crossattn_cache,
+            #     current_start=model_input_start_frame * models.pipeline.frame_seq_length
+            # )
+        # else:
+        #     timestep = torch.ones([1, models.pipeline.num_frame_per_block], device=noisy_input.device,
+        #                           dtype=torch.int64) * 0
+        #     models.transformer(
+        #         noisy_image_or_video=denoised_pred,
+        #         conditional_dict=conditional_dict_gpu0,
+        #         timestep=timestep,
+        #         kv_cache=models.pipeline.kv_cache1,
+        #         crossattn_cache=models.pipeline.crossattn_cache,
+        #         current_start=model_input_start_frame * models.pipeline.frame_seq_length
+        #     )
+
         self.all_latents[:, self.current_start_frame:self.current_start_frame + models.pipeline.num_frame_per_block] = denoised_pred
         self.last_pred = denoised_pred
-        decode_start = time.time()
 
         if (self.params.width, self.params.height) != (832, 480):
             print("Falling back to eager for VAE decode")
