@@ -98,6 +98,23 @@ IMAGE_REWARD_THRESHOLD = float(os.getenv("IMAGE_REWARD_THRESHOLD", "0.0"))
 USE_IMAGE_REWARD = os.getenv("USE_IMAGE_REWARD", "true").lower() in ("true", "1", "yes")
 print(f"ImageReward routing: enabled={USE_IMAGE_REWARD}, threshold={IMAGE_REWARD_THRESHOLD}")
 
+# Module-level routing statistics
+_routing_stats = {
+    "scores": [],       # all draft ImageReward scores
+    "accepted": 0,
+    "rejected": 0,
+}
+
+def get_routing_stats():
+    """Return current routing statistics."""
+    return _routing_stats
+
+def reset_routing_stats():
+    """Reset routing statistics."""
+    _routing_stats["scores"].clear()
+    _routing_stats["accepted"] = 0
+    _routing_stats["rejected"] = 0
+
 gpu = DIFFUSION_GPU
 upload_stream = torch.cuda.Stream(device=gpu)
 download_stream = torch.cuda.Stream(device=gpu)
@@ -932,6 +949,13 @@ class GenerationSession:
             avg_score = _score_frames_image_reward(draft_pixels, self.params.prompt, models.image_reward)
             accept = avg_score >= IMAGE_REWARD_THRESHOLD
             log.info(f"Block {self.block_idx}: ImageReward avg_score={avg_score:.4f}, threshold={IMAGE_REWARD_THRESHOLD}, accept={accept}")
+
+            # Record routing statistics
+            _routing_stats["scores"].append(avg_score)
+            if accept:
+                _routing_stats["accepted"] += 1
+            else:
+                _routing_stats["rejected"] += 1
 
             if accept:
                 # Reuse draft decode results
