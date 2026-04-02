@@ -55,6 +55,11 @@ from wan.modules.vae import WanVAE
 import torch._dynamo as dynamo
 dynamo.config.recompile_limit = 32
 
+# ImageReward for speculative decoding routing
+import sys
+sys.path.insert(0, "/rscratch/yuezhouhu/ImageReward")
+import ImageReward as RM
+
 # Helper function for resampling frames
 def resample_array(array, target_length):
     """Resample a list to the target length using linear interpolation of indices"""
@@ -89,9 +94,32 @@ DIFFUSION_GPU = int(os.getenv("DIFFUSION_GPU", "0"))
 TEXT_VAE_GPU = DIFFUSION_GPU + 1
 print(f"Multi-GPU mode: diffusion={DIFFUSION_GPU}, text_vae={TEXT_VAE_GPU}")
 
+IMAGE_REWARD_THRESHOLD = float(os.getenv("IMAGE_REWARD_THRESHOLD", "0.0"))
+USE_IMAGE_REWARD = os.getenv("USE_IMAGE_REWARD", "true").lower() in ("true", "1", "yes")
+print(f"ImageReward routing: enabled={USE_IMAGE_REWARD}, threshold={IMAGE_REWARD_THRESHOLD}")
+
 gpu = DIFFUSION_GPU
 upload_stream = torch.cuda.Stream(device=gpu)
 download_stream = torch.cuda.Stream(device=gpu)
+
+
+def _score_frames_image_reward(pixels, prompt, image_reward_model):
+    """Score decoded pixel frames with ImageReward.
+    pixels: [1, F, 3, H, W] in [-1, 1] range from VAE decoder.
+    Returns average score across all frames.
+    """
+    num_frames = pixels.shape[1]
+    pil_images = []
+    for i in range(num_frames):
+        frame = pixels[0, i].float().add(1.0).mul(0.5).clamp(0.0, 1.0).cpu()
+        pil_images.append(TF.to_pil_image(frame))
+
+    if len(pil_images) == 1:
+        return image_reward_model.score(prompt, pil_images[0])
+
+    _, rewards = image_reward_model.inference_rank(prompt, pil_images)
+    return sum(rewards) / len(rewards)
+
 
 def load_merge_config(config_path: str | Path) -> OmegaConf:
     config = OmegaConf.load(config_path)
@@ -105,13 +133,14 @@ class Models:
     """
     Wrapper class that holds all loaded models
     """
-    def __init__(self, text_encoder, transformer, drafter, pipeline, vae_encoder, vae_decoder):
+    def __init__(self, text_encoder, transformer, drafter, pipeline, vae_encoder, vae_decoder, image_reward=None):
         self.text_encoder: WanTextEncoder = text_encoder
         self.transformer: WanDiffusionWrapper = transformer
         self.drafter: WanDiffusionWrapper = drafter
         self.pipeline: CausalInferencePipeline = pipeline
         self.vae_encoder: VAEEncoderWrapper = vae_encoder
         self.vae_decoder: VAEDecoderWrapper = vae_decoder
+        self.image_reward = image_reward
 
 def copy_models(models: Models, config, gpu):
     from copy import deepcopy
@@ -420,8 +449,18 @@ def load_all(config: OmegaConf, meta_transformer=False):
 
     t_total_end = time.time()
     log.info(f"All models loaded successfully in {t_total_end - t_total_start:.2f}s")
-    
-    models = Models(text_encoder, transformer, drafter, pipeline, vae_encoder, vae_decoder)
+
+    # Load ImageReward model for routing
+    image_reward = None
+    if USE_IMAGE_REWARD:
+        log.info("Loading ImageReward model...")
+        t_ir_start = time.time()
+        image_reward = RM.load("ImageReward-v1.0", device=f"cuda:{TEXT_VAE_GPU}")
+        image_reward.eval()
+        image_reward.requires_grad_(False)
+        log.info(f"ImageReward loaded in {time.time() - t_ir_start:.2f}s on cuda:{TEXT_VAE_GPU}")
+
+    models = Models(text_encoder, transformer, drafter, pipeline, vae_encoder, vae_decoder, image_reward=image_reward)
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -870,7 +909,40 @@ class GenerationSession:
                     current_start=model_input_start_frame * models.pipeline.frame_seq_length
                 )
 
-        accept = torch.rand((), device=noisy_input.device) < 0.5
+        # --- Routing decision: ImageReward scoring or random ---
+        draft_denoised_pred = denoised_pred
+        already_decoded = False
+
+        if (self.params.width, self.params.height) != (832, 480):
+            ctx = torch.compiler.set_stance("force_eager")
+        else:
+            ctx = torch.compiler.set_stance("default")
+
+        if models.image_reward is not None and USE_IMAGE_REWARD:
+            # Save VAE decode cache (clone tensors for safety)
+            saved_decode_cache = [t.clone() if t is not None else None for t in self.decode_vae_cache]
+
+            # VAE decode draft latents for scoring
+            with ctx:
+                draft_vae_input = draft_denoised_pred.to(f"cuda:{TEXT_VAE_GPU}", non_blocking=True).half()
+                draft_pixels, draft_new_cache = models.vae_decoder(draft_vae_input, *saved_decode_cache)
+                draft_pixels = draft_pixels.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
+
+            # Score frames with ImageReward
+            avg_score = _score_frames_image_reward(draft_pixels, self.params.prompt, models.image_reward)
+            accept = avg_score >= IMAGE_REWARD_THRESHOLD
+            log.info(f"Block {self.block_idx}: ImageReward avg_score={avg_score:.4f}, threshold={IMAGE_REWARD_THRESHOLD}, accept={accept}")
+
+            if accept:
+                # Reuse draft decode results
+                self.decode_vae_cache = list(draft_new_cache) if not isinstance(draft_new_cache, list) else draft_new_cache
+                pixels = draft_pixels
+                already_decoded = True
+            else:
+                # Restore cache for re-decoding after transformer
+                self.decode_vae_cache = saved_decode_cache
+        else:
+            accept = torch.rand((), device=noisy_input.device) < 0.5
 
         if not accept:
             noisy_input = original_noisy_input.clone()
@@ -906,43 +978,17 @@ class GenerationSession:
                         crossattn_cache=models.pipeline.crossattn_cache,
                         current_start=model_input_start_frame * models.pipeline.frame_seq_length
                     )
-            # timestep = torch.ones([1, models.pipeline.num_frame_per_block], device=noisy_input.device,
-            #                       dtype=torch.int64) * 0
-            # models.drafter(
-            #     noisy_image_or_video=denoised_pred,
-            #     conditional_dict=conditional_dict_gpu0,
-            #     timestep=timestep,
-            #     kv_cache=models.pipeline.drafter_kv_cache,
-            #     crossattn_cache=models.pipeline.drafter_crossattn_cache,
-            #     current_start=model_input_start_frame * models.pipeline.frame_seq_length
-            # )
-        # else:
-        #     timestep = torch.ones([1, models.pipeline.num_frame_per_block], device=noisy_input.device,
-        #                           dtype=torch.int64) * 0
-        #     models.transformer(
-        #         noisy_image_or_video=denoised_pred,
-        #         conditional_dict=conditional_dict_gpu0,
-        #         timestep=timestep,
-        #         kv_cache=models.pipeline.kv_cache1,
-        #         crossattn_cache=models.pipeline.crossattn_cache,
-        #         current_start=model_input_start_frame * models.pipeline.frame_seq_length
-        #     )
 
         self.all_latents[:, self.current_start_frame:self.current_start_frame + models.pipeline.num_frame_per_block] = denoised_pred
         self.last_pred = denoised_pred
 
-        if (self.params.width, self.params.height) != (832, 480):
-            print("Falling back to eager for VAE decode")
-            ctx = torch.compiler.set_stance("force_eager")
-        else:
-            ctx = torch.compiler.set_stance("default")
-
-        with ctx:
-            # Move denoised_pred to VAE GPU for decoding
-            denoised_pred_vae = denoised_pred.to(f"cuda:{TEXT_VAE_GPU}", non_blocking=True).half()
-            pixels, self.decode_vae_cache = models.vae_decoder(denoised_pred_vae, *self.decode_vae_cache)
-            # Move pixels back to diffusion GPU
-            pixels = pixels.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
+        if not already_decoded:
+            with ctx:
+                # Move denoised_pred to VAE GPU for decoding
+                denoised_pred_vae = denoised_pred.to(f"cuda:{TEXT_VAE_GPU}", non_blocking=True).half()
+                pixels, self.decode_vae_cache = models.vae_decoder(denoised_pred_vae, *self.decode_vae_cache)
+                # Move pixels back to diffusion GPU
+                pixels = pixels.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
 
         self.frame_context_cache.extend(pixels.split(1, dim=1))
         if idx == 0:
