@@ -94,9 +94,16 @@ DIFFUSION_GPU = int(os.getenv("DIFFUSION_GPU", "0"))
 TEXT_VAE_GPU = DIFFUSION_GPU + 1
 print(f"Multi-GPU mode: diffusion={DIFFUSION_GPU}, text_vae={TEXT_VAE_GPU}")
 
-IMAGE_REWARD_THRESHOLD = float(os.getenv("IMAGE_REWARD_THRESHOLD", "0.0"))
 USE_IMAGE_REWARD = os.getenv("USE_IMAGE_REWARD", "true").lower() in ("true", "1", "yes")
-print(f"ImageReward routing: enabled={USE_IMAGE_REWARD}, threshold={IMAGE_REWARD_THRESHOLD}")
+# Global running-percentile threshold parameters
+REWARD_GLOBAL_MEAN = float(os.getenv("REWARD_GLOBAL_MEAN", "0.566414"))
+REWARD_GLOBAL_STD = float(os.getenv("REWARD_GLOBAL_STD", "1.070617"))
+REWARD_ACCEPT_RATE = float(os.getenv("REWARD_ACCEPT_RATE", "0.72"))
+from scipy.stats import norm as _norm
+# Warmup threshold from prior: accept top ACCEPT_RATE of N(global_mean, global_std^2)
+_WARMUP_THRESHOLD = REWARD_GLOBAL_MEAN + REWARD_GLOBAL_STD * _norm.ppf(1.0 - REWARD_ACCEPT_RATE)
+print(f"ImageReward routing: enabled={USE_IMAGE_REWARD}, accept_rate={REWARD_ACCEPT_RATE}, "
+      f"warmup_threshold={_WARMUP_THRESHOLD:.4f}")
 
 # Module-level routing statistics
 _routing_stats = {
@@ -571,6 +578,8 @@ class GenerationSession:
         self.encode_vae_cache: list[Optional[torch.Tensor]] = [None] * 55
         self.decode_vae_cache: list[Optional[torch.Tensor]] = [None] * 55
         self.num_frame_per_block = 3
+
+        # (no per-session routing state needed; global running percentile is module-level)
        
         self.rnd = torch.Generator(self.gpu).manual_seed(self.params.seed)
 
@@ -947,10 +956,27 @@ class GenerationSession:
 
             # Score frames with ImageReward
             avg_score = _score_frames_image_reward(draft_pixels, self.params.prompt, models.image_reward)
-            accept = avg_score >= IMAGE_REWARD_THRESHOLD
-            log.info(f"Block {self.block_idx}: ImageReward avg_score={avg_score:.4f}, threshold={IMAGE_REWARD_THRESHOLD}, accept={accept}")
 
-            # Record routing statistics
+            # Global running-percentile threshold
+            scores_pool = _routing_stats["scores"]
+            if len(scores_pool) < 5:
+                # Warmup: use prior Gaussian threshold
+                dynamic_threshold = _WARMUP_THRESHOLD
+            else:
+                # Empirical quantile from all observed scores across all prompts
+                sorted_scores = sorted(scores_pool)
+                # (1-accept_rate) quantile, e.g. 40th percentile for 60% accept
+                quantile_pos = (1.0 - REWARD_ACCEPT_RATE) * (len(sorted_scores) - 1)
+                lo = int(quantile_pos)
+                hi = min(lo + 1, len(sorted_scores) - 1)
+                frac = quantile_pos - lo
+                dynamic_threshold = sorted_scores[lo] * (1 - frac) + sorted_scores[hi] * frac
+
+            accept = avg_score >= dynamic_threshold
+            log.info(f"Block {self.block_idx}: ImageReward avg_score={avg_score:.4f}, "
+                     f"threshold={dynamic_threshold:.4f}, pool_size={len(scores_pool)}, accept={accept}")
+
+            # Record global routing statistics (score added AFTER threshold decision)
             _routing_stats["scores"].append(avg_score)
             if accept:
                 _routing_stats["accepted"] += 1
