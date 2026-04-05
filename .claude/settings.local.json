@@ -2,7 +2,24 @@
   "permissions": {
     "allow": [
       "Bash(git log --all --pretty=format:\"%h %s %ae\")",
-      "Bash(git log --pretty=format:\"%ae\")"
+      "Bash(git log --pretty=format:\"%ae\")",
+      "Bash(CUDA_VISIBLE_DEVICES=4,5 /rscratch/yuezhouhu/realtime-video/myenv/bin/python sample_run.py)",
+      "Bash(ls -la /rscratch/yuezhouhu/realtime-video/outputs/samples/*.mp4)",
+      "Bash(ls -lt /rscratch/yuezhouhu/realtime-video/outputs/samples/*.mp4)",
+      "Bash(CUDA_VISIBLE_DEVICES=7 /rscratch/yuezhouhu/realtime-video/myenv/bin/python evaluate_batch.py)",
+      "Bash(python:*)",
+      "Bash(chmod +x:*)",
+      "Bash(bash:*)",
+      "Bash(/rscratch/yuezhouhu/realtime-video/.venv/bin/python:*)",
+      "Bash(/rscratch/yuezhouhu/VisionReward/myenv/bin/python:*)",
+      "Bash(/rscratch/yuezhouhu/realtime-video/.venv/bin/pip list:*)",
+      "Bash(/rscratch/yuezhouhu/realtime-video/.venv/bin/pip install:*)",
+      "Bash(CUDA_VISIBLE_DEVICES=4,5 /rscratch/yuezhouhu/realtime-video/.venv/bin/python -c \"from release_server import GenerateParams; print\\('import OK'\\)\")",
+      "Bash(CUDA_VISIBLE_DEVICES=4,5 /rscratch/yuezhouhu/realtime-video/.venv/bin/python -c \"from release_server import GenerateParams; print\\('IMPORT_OK'\\)\")",
+      "Bash(ls /rscratch/yuezhouhu/realtime-video/outputs/draft_only/*.mp4)",
+      "Bash(ls /rscratch/yuezhouhu/realtime-video/outputs/target_only/*.mp4)",
+      "Bash(ls /rscratch/yuezhouhu/realtime-video/outputs/reward/*.mp4)",
+      "Bash(python3 -c ':*)"
     ],
     "deny": [],
     "ask": []

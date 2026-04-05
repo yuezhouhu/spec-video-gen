@@ -95,15 +95,24 @@ TEXT_VAE_GPU = DIFFUSION_GPU + 1
 print(f"Multi-GPU mode: diffusion={DIFFUSION_GPU}, text_vae={TEXT_VAE_GPU}")
 
 USE_IMAGE_REWARD = os.getenv("USE_IMAGE_REWARD", "true").lower() in ("true", "1", "yes")
-# Global running-percentile threshold parameters
+# Routing mode: "reward" (ImageReward-based), "draft_only" (always accept draft), "target_only" (always use transformer)
+ROUTING_MODE = os.getenv("ROUTING_MODE", "reward").lower()
+assert ROUTING_MODE in ("reward", "draft_only", "target_only"), \
+    f"Invalid ROUTING_MODE={ROUTING_MODE!r}. Must be 'reward', 'draft_only', or 'target_only'."
+# Global running-percentile threshold parameters (only used when ROUTING_MODE=reward)
 REWARD_GLOBAL_MEAN = float(os.getenv("REWARD_GLOBAL_MEAN", "0.566414"))
 REWARD_GLOBAL_STD = float(os.getenv("REWARD_GLOBAL_STD", "1.070617"))
 REWARD_ACCEPT_RATE = float(os.getenv("REWARD_ACCEPT_RATE", "0.72"))
+# Force-reject first block (scene establishment) — adjusts effective accept rate automatically
+REWARD_FORCE_REJECT_FIRST = os.getenv("REWARD_FORCE_REJECT_FIRST", "true").lower() in ("true", "1", "yes")
+# Score mode: "min" uses worst-frame score (catches any bad frame), "avg" uses mean
+REWARD_SCORE_MODE = os.getenv("REWARD_SCORE_MODE", "min")
 from scipy.stats import norm as _norm
 # Warmup threshold from prior: accept top ACCEPT_RATE of N(global_mean, global_std^2)
 _WARMUP_THRESHOLD = REWARD_GLOBAL_MEAN + REWARD_GLOBAL_STD * _norm.ppf(1.0 - REWARD_ACCEPT_RATE)
-print(f"ImageReward routing: enabled={USE_IMAGE_REWARD}, accept_rate={REWARD_ACCEPT_RATE}, "
-      f"warmup_threshold={_WARMUP_THRESHOLD:.4f}")
+print(f"Routing mode: {ROUTING_MODE} | ImageReward enabled={USE_IMAGE_REWARD}, "
+      f"accept_rate={REWARD_ACCEPT_RATE}, force_reject_first={REWARD_FORCE_REJECT_FIRST}, "
+      f"score_mode={REWARD_SCORE_MODE}, warmup_threshold={_WARMUP_THRESHOLD:.4f}")
 
 # Module-level routing statistics
 _routing_stats = {
@@ -130,7 +139,7 @@ download_stream = torch.cuda.Stream(device=gpu)
 def _score_frames_image_reward(pixels, prompt, image_reward_model):
     """Score decoded pixel frames with ImageReward.
     pixels: [1, F, 3, H, W] in [-1, 1] range from VAE decoder.
-    Returns average score across all frames.
+    Returns (avg_score, min_score) tuple.
     """
     num_frames = pixels.shape[1]
     pil_images = []
@@ -139,10 +148,11 @@ def _score_frames_image_reward(pixels, prompt, image_reward_model):
         pil_images.append(TF.to_pil_image(frame))
 
     if len(pil_images) == 1:
-        return image_reward_model.score(prompt, pil_images[0])
+        s = image_reward_model.score(prompt, pil_images[0])
+        return s, s
 
     _, rewards = image_reward_model.inference_rank(prompt, pil_images)
-    return sum(rewards) / len(rewards)
+    return sum(rewards) / len(rewards), min(rewards)
 
 
 def load_merge_config(config_path: str | Path) -> OmegaConf:
@@ -944,53 +954,75 @@ class GenerationSession:
         else:
             ctx = torch.compiler.set_stance("default")
 
-        if models.image_reward is not None and USE_IMAGE_REWARD:
-            # Save VAE decode cache (clone tensors for safety)
-            saved_decode_cache = [t.clone() if t is not None else None for t in self.decode_vae_cache]
-
-            # VAE decode draft latents for scoring
-            with ctx:
-                draft_vae_input = draft_denoised_pred.to(f"cuda:{TEXT_VAE_GPU}", non_blocking=True).half()
-                draft_pixels, draft_new_cache = models.vae_decoder(draft_vae_input, *saved_decode_cache)
-                draft_pixels = draft_pixels.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
-
-            # Score frames with ImageReward
-            avg_score = _score_frames_image_reward(draft_pixels, self.params.prompt, models.image_reward)
-
-            # Global running-percentile threshold
-            scores_pool = _routing_stats["scores"]
-            if len(scores_pool) < 5:
-                # Warmup: use prior Gaussian threshold
-                dynamic_threshold = _WARMUP_THRESHOLD
-            else:
-                # Empirical quantile from all observed scores across all prompts
-                sorted_scores = sorted(scores_pool)
-                # (1-accept_rate) quantile, e.g. 40th percentile for 60% accept
-                quantile_pos = (1.0 - REWARD_ACCEPT_RATE) * (len(sorted_scores) - 1)
-                lo = int(quantile_pos)
-                hi = min(lo + 1, len(sorted_scores) - 1)
-                frac = quantile_pos - lo
-                dynamic_threshold = sorted_scores[lo] * (1 - frac) + sorted_scores[hi] * frac
-
-            accept = avg_score >= dynamic_threshold
-            log.info(f"Block {self.block_idx}: ImageReward avg_score={avg_score:.4f}, "
-                     f"threshold={dynamic_threshold:.4f}, pool_size={len(scores_pool)}, accept={accept}")
-
-            # Record global routing statistics (score added AFTER threshold decision)
-            _routing_stats["scores"].append(avg_score)
-            if accept:
-                _routing_stats["accepted"] += 1
-            else:
+        if ROUTING_MODE == "draft_only":
+            # Force accept: always use drafter output, skip transformer entirely
+            accept = True
+            log.info(f"Block {self.block_idx}: ROUTING_MODE=draft_only, force accept")
+            _routing_stats["accepted"] += 1
+        elif ROUTING_MODE == "target_only":
+            # Force reject: always use transformer, never accept draft
+            accept = False
+            log.info(f"Block {self.block_idx}: ROUTING_MODE=target_only, force reject")
+            _routing_stats["rejected"] += 1
+        elif models.image_reward is not None and USE_IMAGE_REWARD:
+            # Force-reject first block: scene establishment is critical for video quality
+            if REWARD_FORCE_REJECT_FIRST and self.block_idx == 0:
+                accept = False
+                log.info(f"Block {self.block_idx}: Force reject (first block, scene establishment)")
                 _routing_stats["rejected"] += 1
-
-            if accept:
-                # Reuse draft decode results
-                self.decode_vae_cache = list(draft_new_cache) if not isinstance(draft_new_cache, list) else draft_new_cache
-                pixels = draft_pixels
-                already_decoded = True
             else:
-                # Restore cache for re-decoding after transformer
-                self.decode_vae_cache = saved_decode_cache
+                # Save VAE decode cache (clone tensors for safety)
+                saved_decode_cache = [t.clone() if t is not None else None for t in self.decode_vae_cache]
+
+                # VAE decode draft latents for scoring
+                with ctx:
+                    draft_vae_input = draft_denoised_pred.to(f"cuda:{TEXT_VAE_GPU}", non_blocking=True).half()
+                    draft_pixels, draft_new_cache = models.vae_decoder(draft_vae_input, *saved_decode_cache)
+                    draft_pixels = draft_pixels.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
+
+                # Score frames with ImageReward (returns avg, min)
+                avg_score, min_score = _score_frames_image_reward(draft_pixels, self.params.prompt, models.image_reward)
+                score = min_score if REWARD_SCORE_MODE == "min" else avg_score
+
+                # Adjust accept rate to compensate for forced-reject blocks
+                num_forced = 1 if REWARD_FORCE_REJECT_FIRST else 0
+                effective_accept_rate = min(0.95, (REWARD_ACCEPT_RATE * self.num_blocks) / max(1, self.num_blocks - num_forced))
+
+                # Global running-percentile threshold
+                scores_pool = _routing_stats["scores"]
+                if len(scores_pool) < 5:
+                    # Warmup: use prior Gaussian threshold (adjusted for effective rate)
+                    warmup_thresh = REWARD_GLOBAL_MEAN + REWARD_GLOBAL_STD * _norm.ppf(1.0 - effective_accept_rate)
+                    dynamic_threshold = warmup_thresh
+                else:
+                    # Empirical quantile from all observed scores across all prompts
+                    sorted_scores = sorted(scores_pool)
+                    quantile_pos = (1.0 - effective_accept_rate) * (len(sorted_scores) - 1)
+                    lo = int(quantile_pos)
+                    hi = min(lo + 1, len(sorted_scores) - 1)
+                    frac = quantile_pos - lo
+                    dynamic_threshold = sorted_scores[lo] * (1 - frac) + sorted_scores[hi] * frac
+
+                accept = score >= dynamic_threshold
+                log.info(f"Block {self.block_idx}: ImageReward avg={avg_score:.4f} min={min_score:.4f} "
+                         f"score({REWARD_SCORE_MODE})={score:.4f}, threshold={dynamic_threshold:.4f}, "
+                         f"eff_accept={effective_accept_rate:.2f}, pool={len(scores_pool)}, accept={accept}")
+
+                # Record global routing statistics (score added AFTER threshold decision)
+                _routing_stats["scores"].append(score)
+                if accept:
+                    _routing_stats["accepted"] += 1
+                else:
+                    _routing_stats["rejected"] += 1
+
+                if accept:
+                    # Reuse draft decode results
+                    self.decode_vae_cache = list(draft_new_cache) if not isinstance(draft_new_cache, list) else draft_new_cache
+                    pixels = draft_pixels
+                    already_decoded = True
+                else:
+                    # Restore cache for re-decoding after transformer
+                    self.decode_vae_cache = saved_decode_cache
         else:
             accept = torch.rand((), device=noisy_input.device) < 0.5
 
