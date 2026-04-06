@@ -16,7 +16,7 @@ params = GenerateParams(
 
 # Load prompts from file
 PROMPT_FILE = os.getenv("PROMPT_FILE", "MovieGenVideoBench.txt")
-NUM_PROMPTS = int(os.getenv("NUM_PROMPTS", "100"))
+NUM_PROMPTS = int(os.getenv("NUM_PROMPTS", "200"))
 with open(PROMPT_FILE, "r") as f:
     prompts = [line.strip() for line in f if line.strip()][:NUM_PROMPTS]
 print(f"Loaded {len(prompts)} prompts from {PROMPT_FILE}")

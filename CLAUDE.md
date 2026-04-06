@@ -41,33 +41,35 @@ The routing logic lives in `release_server.py`, function `GenerationSession.gene
 | `REWARD_GLOBAL_STD` | `1.070617` | Prior std for warmup Gaussian threshold |
 | `OUTPUT_DIR` | `outputs/samples` | Output directory for `sample_run.py` |
 
-### Benchmark Results (100 prompts from MovieGenVideoBench, 832×480, seed=42, 9 blocks/prompt, RTX A6000)
+### Benchmark Results (200 prompts from MovieGenVideoBench, 832×480, seed=42, 9 blocks/prompt, RTX A6000)
 
 | Mode | Accept Rate | VisionReward | Avg Time/Video | Speedup |
 |---|---|---|---|---|
-| Draft-only | 100% | 0.0672 | 49.00s | 2.51x |
-| **Reward v2 (ours)** | **70.4%** | **0.0759** | **80.36s** | **1.53x** |
-| Target-only | 0% | 0.0743 | 122.72s | 1.00x |
+| Draft-only | 100% | 0.0549 | 40.0s | 2.88x |
+| **Reward v2 (ours)** | **65.2%** | **0.0691** | **71.1s** | **1.62x** |
+| Target-only | 0% | 0.0696 | 115.1s | 1.00x |
 
-Reward v2 **exceeds** target-only quality (0.0759 vs 0.0743) while being 1.53x faster. The routing selectively replaces the worst draft blocks with transformer outputs, which acts as quality filtering — keeping high-quality drafts and only re-generating low-quality ones.
+Reward v2 **matches** target-only quality (0.0691 vs 0.0696, within -0.7%) while being 1.62x faster. Compared to draft-only, Reward v2 improves VisionReward by +25.8% with lower variance (std 0.0745 vs 0.0824). The routing selectively replaces the worst draft blocks with transformer outputs, which acts as quality filtering — keeping high-quality drafts and only re-generating low-quality ones.
 
 ### Reproducing Baselines and Our Method
 
 Conda environment: `/rscratch/yuezhouhu/realtime-video/myenv`
 
+`sample_run.py` reads prompts from `MovieGenVideoBench.txt` (1003 prompts available). Control the number of prompts with `NUM_PROMPTS` env var (default 200). The script supports **resume**: it skips already-generated videos, so you can safely re-run after interruptions.
+
 **1. Draft-only baseline (speed + VisionReward)**
 ```bash
-# Generation (2 GPUs needed)
+# Generation (2 GPUs needed, generates NUM_PROMPTS videos)
 cd /rscratch/yuezhouhu/realtime-video
 conda activate /rscratch/yuezhouhu/realtime-video/myenv
-ROUTING_MODE=draft_only OUTPUT_DIR=outputs/draft_only CUDA_VISIBLE_DEVICES=4,5 python sample_run.py
+ROUTING_MODE=draft_only OUTPUT_DIR=outputs/draft_only NUM_PROMPTS=200 CUDA_VISIBLE_DEVICES=4,5 python sample_run.py
 
 # Speed benchmark (10 prompts)
 ROUTING_MODE=draft_only OUTPUT_DIR=outputs/bench_draft CUDA_VISIBLE_DEVICES=4,5 python benchmark_run.py
 
 # VisionReward evaluation (1 GPU needed)
 cd /rscratch/yuezhouhu/VisionReward
-VIDEO_DIR=/rscratch/yuezhouhu/realtime-video/outputs/draft_only EVAL_OUTPUT=eval_draft_only.json CUDA_VISIBLE_DEVICES=7 python evaluate_batch.py
+VIDEO_DIR=/rscratch/yuezhouhu/realtime-video/outputs/draft_only NUM_PROMPTS=200 EVAL_OUTPUT=eval_draft_only_200.json CUDA_VISIBLE_DEVICES=7 python evaluate_batch.py
 ```
 
 **2. Target-only baseline (speed + VisionReward)**
@@ -75,14 +77,14 @@ VIDEO_DIR=/rscratch/yuezhouhu/realtime-video/outputs/draft_only EVAL_OUTPUT=eval
 # Generation
 cd /rscratch/yuezhouhu/realtime-video
 conda activate /rscratch/yuezhouhu/realtime-video/myenv
-ROUTING_MODE=target_only OUTPUT_DIR=outputs/target_only CUDA_VISIBLE_DEVICES=4,5 python sample_run.py
+ROUTING_MODE=target_only OUTPUT_DIR=outputs/target_only NUM_PROMPTS=200 CUDA_VISIBLE_DEVICES=4,5 python sample_run.py
 
 # Speed benchmark (10 prompts)
 ROUTING_MODE=target_only OUTPUT_DIR=outputs/bench_target CUDA_VISIBLE_DEVICES=4,5 python benchmark_run.py
 
 # VisionReward evaluation
 cd /rscratch/yuezhouhu/VisionReward
-VIDEO_DIR=/rscratch/yuezhouhu/realtime-video/outputs/target_only EVAL_OUTPUT=eval_target_only.json CUDA_VISIBLE_DEVICES=7 python evaluate_batch.py
+VIDEO_DIR=/rscratch/yuezhouhu/realtime-video/outputs/target_only NUM_PROMPTS=200 EVAL_OUTPUT=eval_target_only_200.json CUDA_VISIBLE_DEVICES=7 python evaluate_batch.py
 ```
 
 **3. Reward v2 — our method (speed + VisionReward)**
@@ -90,17 +92,37 @@ VIDEO_DIR=/rscratch/yuezhouhu/realtime-video/outputs/target_only EVAL_OUTPUT=eva
 # Generation (default env vars already set to reward v2)
 cd /rscratch/yuezhouhu/realtime-video
 conda activate /rscratch/yuezhouhu/realtime-video/myenv
-ROUTING_MODE=reward OUTPUT_DIR=outputs/reward CUDA_VISIBLE_DEVICES=4,5 python sample_run.py
+ROUTING_MODE=reward OUTPUT_DIR=outputs/reward_v2 NUM_PROMPTS=200 CUDA_VISIBLE_DEVICES=4,5 python sample_run.py
 
 # Speed benchmark (10 prompts)
 ROUTING_MODE=reward OUTPUT_DIR=outputs/bench_reward CUDA_VISIBLE_DEVICES=4,5 python benchmark_run.py
 
 # VisionReward evaluation
 cd /rscratch/yuezhouhu/VisionReward
-VIDEO_DIR=/rscratch/yuezhouhu/realtime-video/outputs/reward EVAL_OUTPUT=eval_reward.json CUDA_VISIBLE_DEVICES=7 python evaluate_batch.py
+VIDEO_DIR=/rscratch/yuezhouhu/realtime-video/outputs/reward_v2 NUM_PROMPTS=200 EVAL_OUTPUT=eval_reward_200.json CUDA_VISIBLE_DEVICES=7 python evaluate_batch.py
 ```
 
-Note: `sample_run.py` generates 50 videos, `benchmark_run.py` generates 10 videos (for timing). The first video in each run includes `torch.compile` warmup (~extra 100s). Two generation scripts can run in parallel on different GPU pairs (e.g., GPUs 2,3 and 4,5). Evaluation requires the VisionReward model (THUDM/VisionReward-Video) on a separate GPU.
+**Running multiple modes in parallel** (recommended — saves significant time):
+```bash
+# Run draft_only and reward on separate GPU pairs simultaneously
+ROUTING_MODE=draft_only OUTPUT_DIR=outputs/draft_only NUM_PROMPTS=200 CUDA_VISIBLE_DEVICES=2,3 nohup python -u sample_run.py > logs/draft_only.log 2>&1 &
+ROUTING_MODE=reward OUTPUT_DIR=outputs/reward_v2 NUM_PROMPTS=200 CUDA_VISIBLE_DEVICES=4,5 nohup python -u sample_run.py > logs/reward.log 2>&1 &
+# After one finishes, start target_only on the freed GPUs
+ROUTING_MODE=target_only OUTPUT_DIR=outputs/target_only NUM_PROMPTS=200 CUDA_VISIBLE_DEVICES=2,3 nohup python -u sample_run.py > logs/target_only.log 2>&1 &
+
+# Similarly, evaluations can run in parallel on separate GPUs
+cd /rscratch/yuezhouhu/VisionReward
+VIDEO_DIR=.../outputs/draft_only NUM_PROMPTS=200 EVAL_OUTPUT=eval_draft_only_200.json CUDA_VISIBLE_DEVICES=4 nohup python -u evaluate_batch.py > eval_draft.log 2>&1 &
+VIDEO_DIR=.../outputs/reward_v2 NUM_PROMPTS=200 EVAL_OUTPUT=eval_reward_200.json CUDA_VISIBLE_DEVICES=5 nohup python -u evaluate_batch.py > eval_reward.log 2>&1 &
+```
+
+**Approximate timings** (RTX A6000, 200 prompts, 832×480):
+- Generation: draft_only ~40s/video, reward ~71s/video, target_only ~115s/video
+- Each generation run requires 2 GPUs (~34GB + ~22GB)
+- VisionReward evaluation: ~12s/video/GPU (29 VQA questions per video), requires 1 GPU
+- The first video includes `torch.compile` warmup (~extra 100s)
+
+**Existing outputs**: 200-prompt results are stored in `outputs/{draft_only,reward_v2,target_only}/`. Evaluation JSON files are in `/rscratch/yuezhouhu/VisionReward/eval_{draft_only,reward,target_only}_200.json`.
 
 ## Commands
 
@@ -200,7 +222,7 @@ Distillation strategies:
 | File/Dir | Role |
 |---|---|
 | `release_server.py` | FastAPI + WebSocket server; `GenerateParams`, `GenerationSession`, `Models` classes; concurrent generation queue via `ThreadPoolExecutor` |
-| `sample.py` / `sample_run.py` | Offline batch generation (50 prompts); `save_video_direct()` (torchvision) with ffmpeg pipe fallback |
+| `sample.py` / `sample_run.py` | Offline batch generation (200 prompts default, configurable via `NUM_PROMPTS`); resume support (skips existing videos); `save_video_direct()` (torchvision) with ffmpeg pipe fallback |
 | `benchmark_run.py` | Speed benchmark (10 prompts); prints avg time/video at end |
 | `wan/modules/causal_model.py` | `CausalWanModel` — 30-block transformer backbone with RoPE, sinusoidal embeddings, KV caching |
 | `utils/wan_wrapper.py` | `WanTextEncoder`, `WanDiffusionWrapper` — device placement and checkpoint loading |
