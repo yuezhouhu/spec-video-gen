@@ -191,9 +191,17 @@ def sample_videos(
         config = load_merge_config(config_path)
     
     results = {}
-    
+
     # Sample for each prompt
     for prompt_idx, prompt in enumerate(tqdm(prompts_list, desc="Sampling videos")):
+        # Skip already generated videos (resume support)
+        if save_videos:
+            video_path = output_path / f"prompt_{prompt_idx:03d}.mp4"
+            if video_path.exists():
+                print(f"\n⏭️  Prompt {prompt_idx + 1}/{len(prompts_list)}: already exists, skipping")
+                results[prompt_idx] = {"prompt": prompt, "num_frames": 0, "video_path": video_path}
+                continue
+
         print(f"\n📝 Prompt {prompt_idx + 1}/{len(prompts_list)}: {prompt}")
         
         

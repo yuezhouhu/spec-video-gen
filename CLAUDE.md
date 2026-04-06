@@ -41,15 +41,15 @@ The routing logic lives in `release_server.py`, function `GenerationSession.gene
 | `REWARD_GLOBAL_STD` | `1.070617` | Prior std for warmup Gaussian threshold |
 | `OUTPUT_DIR` | `outputs/samples` | Output directory for `sample_run.py` |
 
-### Benchmark Results (50 prompts, 832×480, seed=42, 9 blocks/prompt)
+### Benchmark Results (100 prompts from MovieGenVideoBench, 832×480, seed=42, 9 blocks/prompt, RTX A6000)
 
 | Mode | Accept Rate | VisionReward | Avg Time/Video | Speedup |
 |---|---|---|---|---|
-| Draft-only | 100% | 0.0516 | 45.97s | 2.64x |
-| **Reward v2 (ours)** | **69.8%** | **0.0667** | **77.58s** | **1.57x** |
-| Target-only | 0% | 0.0683 | 121.45s | 1.00x |
+| Draft-only | 100% | 0.0672 | 49.00s | 2.51x |
+| **Reward v2 (ours)** | **70.4%** | **0.0759** | **80.36s** | **1.53x** |
+| Target-only | 0% | 0.0743 | 122.72s | 1.00x |
 
-Reward v2 recovers 90.4% of the target-only quality while being 1.57x faster.
+Reward v2 **exceeds** target-only quality (0.0759 vs 0.0743) while being 1.53x faster. The routing selectively replaces the worst draft blocks with transformer outputs, which acts as quality filtering — keeping high-quality drafts and only re-generating low-quality ones.
 
 ### Reproducing Baselines and Our Method
 
