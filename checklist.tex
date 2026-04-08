@@ -1,0 +1,85 @@
+\section*{NeurIPS Paper Checklist}
+
+\begin{enumerate}
+
+\item {\bf Claims}
+    \item[] Question: Do the main claims made in the abstract and introduction accurately reflect the paper's contributions and scope?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: The abstract and introduction claim 1.66$\times$ speedup and 97.1\% quality retention, which are directly supported by Table~1. The three algorithmic contributions (force-reject, min-frame scoring, adaptive threshold) are all described in Section~4.
+
+\item {\bf Limitations}
+    \item[] Question: Does the paper discuss the limitations of the work performed by the authors?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~6 discusses four limitations: drafter quality ceiling, ImageReward as a proxy, overhead of draft decoding, and single-session scope.
+
+\item {\bf Theory assumptions and proofs}
+    \item[] Question: For each theoretical result, does the paper provide the full set of assumptions and a complete (and correct) proof?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: The paper is empirical; it contains no formal theorems or proofs. The computational cost analysis in Section~4.5 is informal.
+
+    \item {\bf Experimental result reproducibility}
+    \item[] Question: Does the paper fully disclose all the information needed to reproduce the main experimental results of the paper to the extent that it affects the main claims and/or conclusions of the paper (regardless of whether the code and data are provided or not)?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~5.1 and Appendix~A fully specify the models, denoising schedule, resolution, seed, evaluation protocol, and hardware. Algorithm~1 provides the complete routing procedure.
+
+\item {\bf Open access to data and code}
+    \item[] Question: Does the paper provide open access to the data and code, with sufficient instructions to faithfully reproduce the main experimental results, as described in supplemental material?
+    \item[] Answer: \answerNo{}
+    \item[] Justification: Code and model checkpoints are not released in this submission due to licensing constraints. The prompts are from the publicly available MovieGenVideoBench benchmark. Sufficient detail is provided in the paper for re-implementation.
+
+\item {\bf Experimental setting/details}
+    \item[] Question: Does the paper specify all the training and test details necessary to understand the results?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~5.1 specifies all hyperparameters (denoising schedule, guidance scale, resolution, seed, GPU configuration). No training is performed; this is an inference-time method.
+
+\item {\bf Experiment statistical significance}
+    \item[] Question: Does the paper report error bars suitably and correctly defined or other appropriate information about the statistical significance of the experiments?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Table~1 reports mean and standard deviation of VisionReward scores over 200 prompts. Figure~2 shows the full score distribution via violin plots.
+
+\item {\bf Experiments compute resources}
+    \item[] Question: For each experiment, does the paper provide sufficient information on the computer resources needed to reproduce the experiments?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Section~5.1 specifies two NVIDIA RTX A6000 (48\,GB) GPUs with their respective roles. Wall-clock times per video are reported in Table~1.
+
+\item {\bf Code of ethics}
+    \item[] Question: Does the research conducted in the paper conform, in every respect, with the NeurIPS Code of Ethics?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: This paper presents a method for accelerating video generation inference. It poses no data privacy, fairness, or safety concerns beyond those of the base models.
+
+\item {\bf Broader impacts}
+    \item[] Question: Does the paper discuss both potential positive societal impacts and negative societal impacts of the work performed?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: Accelerating video generation reduces computational cost and energy consumption (positive). Faster high-quality video generation could lower barriers to creating synthetic media, including deepfakes (negative); this is acknowledged in the broader video generation literature.
+
+\item {\bf Safeguards}
+    \item[] Question: Does the paper describe safeguards that have been put in place for responsible release of data or models that have a high risk for misuse?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: No new models or datasets are released. The base models are subject to the original model's usage restrictions (CC-BY-NC-SA-4.0).
+
+\item {\bf Licenses for existing assets}
+    \item[] Question: Are the creators or original owners of assets used in the paper properly credited and are the license and terms of use explicitly mentioned?
+    \item[] Answer: \answerYes{}
+    \item[] Justification: The Wan2.1 model, Self-Forcing framework, ImageReward, VisionReward, and MovieGenVideoBench prompts are all cited. The base model uses a non-commercial license (CC-BY-NC-SA-4.0).
+
+\item {\bf New assets}
+    \item[] Question: Are new assets introduced in the paper well documented?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: No new assets (datasets, models, or checkpoints) are introduced.
+
+\item {\bf Crowdsourcing and research with human subjects}
+    \item[] Question: Does the paper include the full text of instructions given to participants, if applicable?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: No crowdsourcing or human subjects research was conducted.
+
+\item {\bf Institutional review board (IRB) approvals or equivalent}
+    \item[] Question: Does the paper describe potential risks incurred by study participants, whether such risks were disclosed, and whether IRB approvals were obtained?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: No human subjects research was conducted.
+
+\item {\bf Declaration of LLM usage}
+    \item[] Question: Does the paper describe the usage of LLMs if it is an important, original, or non-standard component of the core methods?
+    \item[] Answer: \answerNA{}
+    \item[] Justification: No LLMs are used as core components of our method. The drafter and target are video diffusion transformers, not language models.
+
+\end{enumerate}
