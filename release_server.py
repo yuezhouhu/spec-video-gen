@@ -380,19 +380,13 @@ def load_all(config: OmegaConf, meta_transformer=False):
     
     
     # Create progress bar with 4 stages
-    with tqdm(total=5, desc="Loading models") as pbar:
-        # Load transformer
-        pbar.set_description("Loading transformer")
-        t_stage_start = time.time()
-        transformer = load_transformer(config)
-        log.debug(f"Loading transformer took: {time.time() - t_stage_start:.2f}s")
-        pbar.update(1)
-
-        # Load drafter (smaller transformer for fast prediction)
+    with tqdm(total=4, desc="Loading models") as pbar:
+        # Load drafter model (used for all inference; transformer/target not needed)
         pbar.set_description("Loading drafter")
         t_stage_start = time.time()
         drafter = load_drafter(config)
         log.debug(f"Loading drafter took: {time.time() - t_stage_start:.2f}s")
+        transformer = drafter  # transformer checkpoint not needed for draft-only inference
         pbar.update(1)
 
         # Load text encoder
@@ -672,8 +666,6 @@ class GenerationSession:
         models.pipeline.local_attn_size = attn_size
         for block in models.pipeline.generator.model.blocks:
             block.self_attn.local_attn_size = -1
-        models.pipeline._initialize_kv_cache(batch_size=1, dtype=torch.bfloat16, device=gpu)
-        models.pipeline._initialize_crossattn_cache(batch_size=1, dtype=torch.bfloat16, device=gpu)
         models.pipeline._initialize_drafter_kv_cache(batch_size=1, dtype=torch.bfloat16, device=gpu)
         models.pipeline._initialize_drafter_crossattn_cache(batch_size=1, dtype=torch.bfloat16, device=gpu)
         models.pipeline.generator.model.block_mask = None
@@ -718,7 +710,6 @@ class GenerationSession:
 
     def recompute_kv_cache(self, models: Models):
         if self.block_idx == 0:
-            models.pipeline._initialize_kv_cache(batch_size=1, dtype=torch.bfloat16, device=self.gpu)
             models.pipeline._initialize_drafter_kv_cache(batch_size=1, dtype=torch.bfloat16, device=self.gpu)
             if self.resume_latents is not None:
                 raise NotImplementedError
@@ -737,9 +728,6 @@ class GenerationSession:
 
         clean_context_frames = self.get_clean_context_frames(models)
 
-        models.pipeline._initialize_kv_cache(
-            batch_size=clean_context_frames.shape[0], dtype=clean_context_frames.dtype, device=clean_context_frames.device
-        )
         models.pipeline._initialize_drafter_kv_cache(
             batch_size=clean_context_frames.shape[0], dtype=clean_context_frames.dtype, device=clean_context_frames.device
         )
@@ -756,23 +744,12 @@ class GenerationSession:
             [clean_context_frames.shape[0], clean_context_frames.shape[1]],
             device=clean_context_frames.device,
             dtype=torch.int64) * 0
-        models.pipeline.generator.model.block_mask = block_mask
         models.pipeline.drafter.model.block_mask = block_mask
 
         # Move conditional_dict to diffusion GPU
         conditional_dict_gpu0 = {}
         for key, value in self.conditional_dict.items():
             conditional_dict_gpu0[key] = value.to(f"cuda:{DIFFUSION_GPU}", non_blocking=True)
-        
-        models.transformer(
-            noisy_image_or_video=clean_context_frames,
-            conditional_dict=conditional_dict_gpu0,
-            timestep=context_timestep,
-            kv_cache=models.pipeline.kv_cache1,
-            crossattn_cache=models.pipeline.crossattn_cache,
-            current_start=model_input_start_frame * models.pipeline.frame_seq_length,
-        )
-        models.pipeline.generator.model.block_mask = None
 
         models.drafter(
             noisy_image_or_video=clean_context_frames,
@@ -917,7 +894,8 @@ class GenerationSession:
 
 def compile_models(models: Models):
     models.vae_decoder = torch.compile(models.vae_decoder, fullgraph=True,)
-    models.transformer = torch.compile(models.transformer)
+    models.drafter = torch.compile(models.drafter)
+    models.transformer = models.drafter
 
 # SECTION - SERVER & HANDLING
 async def lifespan(app: FastAPI):

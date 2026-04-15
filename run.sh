@@ -1,1 +1,1 @@
-CUDA_VISIBLE_DEVICES=6,7 python sample_run.py
+NUM_PROMPTS=1003 CUDA_VISIBLE_DEVICES=2,3 python sample_run.py
