@@ -32,7 +32,22 @@
       "Bash(pkill -f 'sample_run.py\\\\|evaluate_batch.py\\\\|benchmark_run.py')",
       "Bash(rm -f /rscratch/yuezhouhu/VisionReward/eval_*.json)",
       "Bash(rm -f /tmp/gen_*.log /tmp/eval_*.log /tmp/bench_*.log)",
-      "Bash(VIDEO_DIR=/rscratch/yuezhouhu/realtime-video/outputs/target_only EVAL_OUTPUT=eval_target_only.json CUDA_VISIBLE_DEVICES=4 /rscratch/yuezhouhu/realtime-video/myenv/bin/python:*)"
+      "Bash(VIDEO_DIR=/rscratch/yuezhouhu/realtime-video/outputs/target_only EVAL_OUTPUT=eval_target_only.json CUDA_VISIBLE_DEVICES=4 /rscratch/yuezhouhu/realtime-video/myenv/bin/python:*)",
+      "Bash(rtk grep:*)",
+      "Bash(mkdir -p ~/texmf/tex/latex/environ)",
+      "Bash(tlmgr install:*)",
+      "Bash(dpkg -l)",
+      "Bash(pdflatex -interaction=nonstopmode neurips_2026.tex)",
+      "Bash(mkdir -p ~/texmf/tex/latex/algorithms)",
+      "Bash(curl -sLf https://raw.githubusercontent.com/josephwright/algorithms/master/algorithm.sty -o '~/texmf/tex/latex/algorithms/algorithm.sty')",
+      "Read(//home/eecs/yuezhouhu/texmf/tex/latex/algorithms/**)",
+      "Bash(wget -q https://raw.githubusercontent.com/josephwright/algorithms/master/algorithm.sty -O '~/texmf/tex/latex/algorithms/algorithm.sty')",
+      "Bash(rtk curl:*)",
+      "Bash(kpsewhich framed.sty)",
+      "Bash(kpsewhich fancybox.sty)",
+      "Bash(kpsewhich fbox.sty)",
+      "Bash(bibtex neurips_2026)",
+      "Bash(rtk read:*)"
     ],
     "deny": [],
     "ask": []

@@ -85,21 +85,14 @@ session_frames_storage: Dict[str, List[torch.Tensor]] = {}
 session_frame_locks: Dict[str, threading.Lock] = {}
 
 UUID_NIL = str(uuid.UUID(int=0))
-USE_STATIC_ENCODER_COND_DICT = os.getenv("USE_STATIC_ENCODER_COND_DICT", "false").lower() in ("true", "1", "yes")
 
 DO_COMPILE = os.getenv("DO_COMPILE", "false").lower() in ("true", "1", "yes")
-print("DO_COMPILE", DO_COMPILE)
 
 DIFFUSION_GPU = int(os.getenv("DIFFUSION_GPU", "0"))
 TEXT_VAE_GPU = DIFFUSION_GPU + 1
-print(f"Multi-GPU mode: diffusion={DIFFUSION_GPU}, text_vae={TEXT_VAE_GPU}")
 
 USE_IMAGE_REWARD = os.getenv("USE_IMAGE_REWARD", "true").lower() in ("true", "1", "yes")
-# Routing mode: "reward" (ImageReward-based), "draft_only" (always accept draft), "target_only" (always use transformer)
-ROUTING_MODE = os.getenv("ROUTING_MODE", "reward").lower()
-assert ROUTING_MODE in ("reward", "draft_only", "target_only"), \
-    f"Invalid ROUTING_MODE={ROUTING_MODE!r}. Must be 'reward', 'draft_only', or 'target_only'."
-# Global running-percentile threshold parameters (only used when ROUTING_MODE=reward)
+# Global running-percentile threshold parameters (only used when REWARD_THRESHOLD_MODE=dynamic)
 REWARD_GLOBAL_MEAN = float(os.getenv("REWARD_GLOBAL_MEAN", "0.566414"))
 REWARD_GLOBAL_STD = float(os.getenv("REWARD_GLOBAL_STD", "1.070617"))
 REWARD_ACCEPT_RATE = float(os.getenv("REWARD_ACCEPT_RATE", "0.72"))
@@ -107,12 +100,20 @@ REWARD_ACCEPT_RATE = float(os.getenv("REWARD_ACCEPT_RATE", "0.72"))
 REWARD_FORCE_REJECT_FIRST = os.getenv("REWARD_FORCE_REJECT_FIRST", "true").lower() in ("true", "1", "yes")
 # Score mode: "min" uses worst-frame score (catches any bad frame), "avg" uses mean
 REWARD_SCORE_MODE = os.getenv("REWARD_SCORE_MODE", "min")
+# Threshold mode: "dynamic" (v2 running-percentile), "fixed" (v2.5 constant threshold)
+REWARD_THRESHOLD_MODE = os.getenv("REWARD_THRESHOLD_MODE", "dynamic").lower()
+assert REWARD_THRESHOLD_MODE in ("dynamic", "fixed"), \
+    f"Invalid REWARD_THRESHOLD_MODE={REWARD_THRESHOLD_MODE!r}. Must be 'dynamic' or 'fixed'."
+# Fixed threshold for REWARD_THRESHOLD_MODE=fixed (default: -0.7769, empirical 19th percentile
+# from 200-prompt MovieGenVideoBench run with eff_accept=0.81, score_mode=min)
+REWARD_FIXED_THRESHOLD = float(os.getenv("REWARD_FIXED_THRESHOLD", "-0.7769"))
 from scipy.stats import norm as _norm
 # Warmup threshold from prior: accept top ACCEPT_RATE of N(global_mean, global_std^2)
 _WARMUP_THRESHOLD = REWARD_GLOBAL_MEAN + REWARD_GLOBAL_STD * _norm.ppf(1.0 - REWARD_ACCEPT_RATE)
-print(f"Routing mode: {ROUTING_MODE} | ImageReward enabled={USE_IMAGE_REWARD}, "
+print(f"Routing: ImageReward enabled={USE_IMAGE_REWARD}, "
       f"accept_rate={REWARD_ACCEPT_RATE}, force_reject_first={REWARD_FORCE_REJECT_FIRST}, "
-      f"score_mode={REWARD_SCORE_MODE}, warmup_threshold={_WARMUP_THRESHOLD:.4f}")
+      f"score_mode={REWARD_SCORE_MODE}, threshold_mode={REWARD_THRESHOLD_MODE}, "
+      f"fixed_threshold={REWARD_FIXED_THRESHOLD:.4f}, warmup_threshold={_WARMUP_THRESHOLD:.4f}")
 
 # Module-level routing statistics
 _routing_stats = {
@@ -191,16 +192,6 @@ def load_text_encoder():
     """Load and configure the text encoder model"""
     t_start = time.time()
 
-    if USE_STATIC_ENCODER_COND_DICT:
-        # temp code to just return a static embedding
-        # TODO: remove
-        print("USING STATIC COND DICT. PLSPLSPLS REMOVE BEFORE MERGING")
-        static_cond_dict = torch.load("static_cond_dict_cat_skateboard.pth")
-        class StaticTextEncoder(torch.nn.Module):
-            def forward(self, text_prompts):
-                return static_cond_dict
-        return StaticTextEncoder()
-    
     from utils.wan_wrapper import WanTextEncoder
     t_import = time.time()
     log.debug(f"Text encoder import took: {t_import - t_start:.2f}s")
@@ -499,7 +490,6 @@ def load_all(config: OmegaConf, meta_transformer=False):
     gc.collect()
     torch.cuda.empty_cache()
     if DO_COMPILE:
-        print("compiling models")
         compile_models(models)
     gc.collect()
     torch.cuda.empty_cache()
@@ -954,17 +944,7 @@ class GenerationSession:
         else:
             ctx = torch.compiler.set_stance("default")
 
-        if ROUTING_MODE == "draft_only":
-            # Force accept: always use drafter output, skip transformer entirely
-            accept = True
-            log.info(f"Block {self.block_idx}: ROUTING_MODE=draft_only, force accept")
-            _routing_stats["accepted"] += 1
-        elif ROUTING_MODE == "target_only":
-            # Force reject: always use transformer, never accept draft
-            accept = False
-            log.info(f"Block {self.block_idx}: ROUTING_MODE=target_only, force reject")
-            _routing_stats["rejected"] += 1
-        elif models.image_reward is not None and USE_IMAGE_REWARD:
+        if models.image_reward is not None and USE_IMAGE_REWARD:
             # Force-reject first block: scene establishment is critical for video quality
             if REWARD_FORCE_REJECT_FIRST and self.block_idx == 0:
                 accept = False
@@ -984,29 +964,32 @@ class GenerationSession:
                 avg_score, min_score = _score_frames_image_reward(draft_pixels, self.params.prompt, models.image_reward)
                 score = min_score if REWARD_SCORE_MODE == "min" else avg_score
 
-                # Adjust accept rate to compensate for forced-reject blocks
-                num_forced = 1 if REWARD_FORCE_REJECT_FIRST else 0
-                effective_accept_rate = min(0.95, (REWARD_ACCEPT_RATE * self.num_blocks) / max(1, self.num_blocks - num_forced))
-
-                # Global running-percentile threshold
-                scores_pool = _routing_stats["scores"]
-                if len(scores_pool) < 5:
-                    # Warmup: use prior Gaussian threshold (adjusted for effective rate)
-                    warmup_thresh = REWARD_GLOBAL_MEAN + REWARD_GLOBAL_STD * _norm.ppf(1.0 - effective_accept_rate)
-                    dynamic_threshold = warmup_thresh
+                # Compute threshold based on mode
+                if REWARD_THRESHOLD_MODE == "fixed":
+                    # v2.5: constant threshold (no warmup, no score pool dependency)
+                    threshold = REWARD_FIXED_THRESHOLD
                 else:
-                    # Empirical quantile from all observed scores across all prompts
-                    sorted_scores = sorted(scores_pool)
-                    quantile_pos = (1.0 - effective_accept_rate) * (len(sorted_scores) - 1)
-                    lo = int(quantile_pos)
-                    hi = min(lo + 1, len(sorted_scores) - 1)
-                    frac = quantile_pos - lo
-                    dynamic_threshold = sorted_scores[lo] * (1 - frac) + sorted_scores[hi] * frac
+                    # v2 dynamic: running-percentile threshold
+                    num_forced = 1 if REWARD_FORCE_REJECT_FIRST else 0
+                    effective_accept_rate = min(0.95, (REWARD_ACCEPT_RATE * self.num_blocks) / max(1, self.num_blocks - num_forced))
 
-                accept = score >= dynamic_threshold
+                    scores_pool = _routing_stats["scores"]
+                    if len(scores_pool) < 5:
+                        # Warmup: use prior Gaussian threshold (adjusted for effective rate)
+                        threshold = REWARD_GLOBAL_MEAN + REWARD_GLOBAL_STD * _norm.ppf(1.0 - effective_accept_rate)
+                    else:
+                        # Empirical quantile from all observed scores across all prompts
+                        sorted_scores = sorted(scores_pool)
+                        quantile_pos = (1.0 - effective_accept_rate) * (len(sorted_scores) - 1)
+                        lo = int(quantile_pos)
+                        hi = min(lo + 1, len(sorted_scores) - 1)
+                        frac = quantile_pos - lo
+                        threshold = sorted_scores[lo] * (1 - frac) + sorted_scores[hi] * frac
+
+                accept = score >= threshold
                 log.info(f"Block {self.block_idx}: ImageReward avg={avg_score:.4f} min={min_score:.4f} "
-                         f"score({REWARD_SCORE_MODE})={score:.4f}, threshold={dynamic_threshold:.4f}, "
-                         f"eff_accept={effective_accept_rate:.2f}, pool={len(scores_pool)}, accept={accept}")
+                         f"score({REWARD_SCORE_MODE})={score:.4f}, threshold={threshold:.4f}, "
+                         f"mode={REWARD_THRESHOLD_MODE}, pool={len(_routing_stats['scores'])}, accept={accept}")
 
                 # Record global routing statistics (score added AFTER threshold decision)
                 _routing_stats["scores"].append(score)
