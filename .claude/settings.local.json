@@ -2,7 +2,12 @@
   "permissions": {
     "allow": [
       "Bash(git log --all --pretty=format:\"%h %s %ae\")",
-      "Bash(git log --pretty=format:\"%ae\")"
+      "Bash(git log --pretty=format:\"%ae\")",
+      "Bash(rtk ls:*)",
+      "Bash(rtk find:*)",
+      "Bash(rtk read:*)",
+      "Bash(rtk grep:*)",
+      "Bash(rtk wc:*)"
     ],
     "deny": [],
     "ask": []

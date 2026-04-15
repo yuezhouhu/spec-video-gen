@@ -380,19 +380,12 @@ def load_all(config: OmegaConf, meta_transformer=False):
     
     
     # Create progress bar with 4 stages
-    with tqdm(total=5, desc="Loading models") as pbar:
+    with tqdm(total=4, desc="Loading models") as pbar:
         # Load transformer
         pbar.set_description("Loading transformer")
         t_stage_start = time.time()
         transformer = load_transformer(config)
         log.debug(f"Loading transformer took: {time.time() - t_stage_start:.2f}s")
-        pbar.update(1)
-
-        # Load drafter (smaller transformer for fast prediction)
-        pbar.set_description("Loading drafter")
-        t_stage_start = time.time()
-        drafter = load_drafter(config)
-        log.debug(f"Loading drafter took: {time.time() - t_stage_start:.2f}s")
         pbar.update(1)
 
         # Load text encoder
@@ -414,14 +407,14 @@ def load_all(config: OmegaConf, meta_transformer=False):
         # Initialize pipeline
         pbar.set_description("Initializing pipeline")
         t_stage_start = time.time()
-        pipeline = load_pipeline(config, torch.cuda.current_device(), transformer, drafter, text_encoder, vae_decoder)
+        pipeline = load_pipeline(config, torch.cuda.current_device(), transformer, None, text_encoder, vae_decoder)
         log.debug(f"Initializing pipeline took: {time.time() - t_stage_start:.2f}s")
         pbar.update(1)
 
     t_total_end = time.time()
     log.info(f"All models loaded successfully in {t_total_end - t_total_start:.2f}s")
     
-    models = Models(text_encoder, transformer, drafter, pipeline, vae_encoder, vae_decoder)
+    models = Models(text_encoder, transformer, None, pipeline, vae_encoder, vae_decoder)
 
     gc.collect()
     torch.cuda.empty_cache()
@@ -719,7 +712,6 @@ class GenerationSession:
     def recompute_kv_cache(self, models: Models):
         if self.block_idx == 0:
             models.pipeline._initialize_kv_cache(batch_size=1, dtype=torch.bfloat16, device=self.gpu)
-            models.pipeline._initialize_drafter_kv_cache(batch_size=1, dtype=torch.bfloat16, device=self.gpu)
             if self.resume_latents is not None:
                 raise NotImplementedError
                 print("Resuming generation from latents, shape", self.resume_latents.shape)
@@ -740,9 +732,6 @@ class GenerationSession:
         models.pipeline._initialize_kv_cache(
             batch_size=clean_context_frames.shape[0], dtype=clean_context_frames.dtype, device=clean_context_frames.device
         )
-        models.pipeline._initialize_drafter_kv_cache(
-            batch_size=clean_context_frames.shape[0], dtype=clean_context_frames.dtype, device=clean_context_frames.device
-        )
 
         block_mask = models.pipeline.generator.model._prepare_blockwise_causal_attn_mask(
             device=str(clean_context_frames.device),
@@ -757,7 +746,6 @@ class GenerationSession:
             device=clean_context_frames.device,
             dtype=torch.int64) * 0
         models.pipeline.generator.model.block_mask = block_mask
-        models.pipeline.drafter.model.block_mask = block_mask
 
         # Move conditional_dict to diffusion GPU
         conditional_dict_gpu0 = {}
@@ -774,15 +762,6 @@ class GenerationSession:
         )
         models.pipeline.generator.model.block_mask = None
 
-        models.drafter(
-            noisy_image_or_video=clean_context_frames,
-            conditional_dict=conditional_dict_gpu0,
-            timestep=context_timestep,
-            kv_cache=models.pipeline.drafter_kv_cache,
-            crossattn_cache=models.pipeline.drafter_crossattn_cache,
-            current_start=model_input_start_frame * models.pipeline.frame_seq_length,
-        )
-        models.pipeline.drafter.model.block_mask = None
         return model_input_start_frame
 
     @torch.inference_mode()
@@ -838,12 +817,12 @@ class GenerationSession:
 
             if index < len(self.denoising_step_list) - 1:
                 start_time = time.time()
-                _, denoised_pred = models.drafter(
+                _, denoised_pred = models.transformer(
                     noisy_image_or_video=noisy_input,
                     conditional_dict=conditional_dict_gpu0,
                     timestep=timestep,
-                    kv_cache=models.pipeline.drafter_kv_cache,
-                    crossattn_cache=models.pipeline.drafter_crossattn_cache,
+                    kv_cache=models.pipeline.kv_cache1,
+                    crossattn_cache=models.pipeline.crossattn_cache,
                     current_start=model_input_start_frame * models.pipeline.frame_seq_length
                 )
                 start_time = time.time()
@@ -857,12 +836,12 @@ class GenerationSession:
             else:
                 start_time = time.time()
                 # otherwise just denoise
-                _, denoised_pred = models.drafter(
+                _, denoised_pred = models.transformer(
                     noisy_image_or_video=noisy_input,
                     conditional_dict=conditional_dict_gpu0,
                     timestep=timestep,
-                    kv_cache=models.pipeline.drafter_kv_cache,
-                    crossattn_cache=models.pipeline.drafter_crossattn_cache,
+                    kv_cache=models.pipeline.kv_cache1,
+                    crossattn_cache=models.pipeline.crossattn_cache,
                     current_start=model_input_start_frame * models.pipeline.frame_seq_length
                 )
 
