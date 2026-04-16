@@ -70,8 +70,7 @@
 % ──────────────────────────── Title block ─────────────────────────────────
 \title{%
   \Large\bfseries
-  Reward-Guided Speculative Decoding\\
-  for Autoregressive Video Diffusion%
+  Reward-Guided Speculative Video Generation%
 }
 \author{Anonymous Authors}
 \date{}
@@ -90,19 +89,19 @@
 Autoregressive video diffusion enables real-time streaming generation but
 remains computationally demanding when deployed with high-quality
 transformer models.
-We propose \textbf{Reward-Guided Speculative Decoding for Video}
-(RGSD-Video), which adapts the speculative decoding paradigm from large
+We propose \textbf{Reward-Guided Speculative Video Generation}
+(RSVG), which adapts the speculative decoding paradigm from large
 language models to block-based autoregressive video generation.
-A compact 1.3B drafter model generates candidate video blocks via four
-denoising steps; an ImageReward quality router then decides, per block,
-whether to accept the draft or re-generate with the full 14B target model.
+A compact drafter model generates candidate video blocks via four
+denoising steps; an image quality router then decides, per block,
+whether to accept the draft or re-generate with the full target model.
 Three design choices are central: \emph{(i)} mandatory first-block
 regeneration for compositional consistency, \emph{(ii)} worst-frame
 quality scoring to detect per-frame artifacts masked by averages, and
 \emph{(iii)} a globally adaptive threshold derived from a running percentile
 of all observed draft scores.
 On 200 prompts from MovieGenVideoBench at $832{\times}480$ resolution,
-RGSD-Video achieves \textbf{97.1\%} of target-only VisionReward quality
+RSVG achieves \textbf{97.1\%} of target-only VisionReward quality
 (0.0676 vs.\ 0.0696) at a \textbf{1.66$\times$ speedup} over the target
 model, while improving over draft-only quality by $+23.1\%$.
 \end{abstract}
@@ -110,107 +109,125 @@ model, while improving over draft-only quality by $+23.1\%$.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Introduction}
 
-Video generation has advanced rapidly, with diffusion-based models capable
-of producing realistic clips from text prompts
-\citep{openaisora2024,moviegen2024,wan2025}.
-Yet the standard paradigm---running a large transformer through many
-denoising steps for every frame---is prohibitively expensive for
-interactive or real-time applications.
-The Self-Forcing framework \citep{selfforcing2025} introduced a compelling
-approach by training autoregressive video diffusion models that generate
-video block-by-block, conditioning each new block on its own prior outputs,
-eliminating exposure bias and enabling real-time streaming generation.
-Despite this progress, the system still runs the full target transformer
-for every block.
+Autoregressive video generation has recently emerged as a compelling
+paradigm for efficient, streaming video synthesis.
+Unlike conventional video diffusion models that generate all frames
+jointly \citep{openaisora2024,moviegen2024}, autoregressive approaches
+produce video block by block, conditioning each new block on previously
+generated content through a shared key-value (KV) cache---mirroring the
+autoregressive paradigm of large language models (LLMs).
+This design eliminates exposure bias and enables streaming generation:
+frames can be displayed as they are produced, rather than waiting for the
+full sequence to complete.
+Self-Forcing \citep{selfforcing2025} exemplifies this approach, training
+a causal video diffusion transformer with self-generated conditioning that
+achieves real-time video output on a single GPU.
 
-\textbf{Speculative decoding} for large language models (LLMs)
-\citep{leviathan2023fast,chen2023accelerating} has demonstrated that a
-small draft model can propose token sequences that a large target model
-verifies cheaply, yielding 2--3$\times$ speedups.
-\citet{rsd2025} recently extended this with reward-guided routing (RSD),
-showing that a process reward model can bias acceptance toward high-reward
-outputs, achieving substantial efficiency gains on reasoning tasks.
-We ask: can reward-guided speculative decoding be adapted to video?
+Despite this structural efficiency advantage, state-of-the-art
+autoregressive video models are built on 10B+ parameter transformers.
+The Krea Realtime Video 14B model \citep{kreablog2025}, for instance,
+requires a high-end NVIDIA B200 GPU to achieve real-time throughput;
+on a commodity RTX A6000, generating a 27-frame clip takes over
+112\,seconds.
+At the same time, compact 1B-scale video models---such as
+Wan2.1-T2V-1.3B \citep{wan2025}---run at roughly one-tenth of the
+computational cost (36\,s on the same hardware) and produce lower but
+still reasonable quality.
+The central question is then: \emph{can we capture the speed of small
+models while retaining the quality of large ones?}
+Speculative decoding for LLMs \citep{leviathan2023fast,chen2023accelerating}
+offers a compelling blueprint: a small draft model proposes candidate
+outputs, and the large target model is invoked only when necessary.
+The block-by-block structure of autoregressive video generation is
+especially well-suited to this paradigm---each generated block is a
+self-contained unit that can be evaluated before being committed to the
+KV cache, making per-block routing a natural design choice.
 
-The setting is fundamentally different from LLMs:
-video blocks are spatiotemporal patches of many frames,
-there is no exact token-level acceptance criterion,
-and quality must be evaluated holistically across frames.
-Moreover, the first block of a video is especially critical---it
-establishes scene composition, foreground subjects, and style
-that all subsequent blocks build upon.
-These differences require new design choices beyond a direct port of RSD.
+Making large and small models cooperate effectively is, however,
+non-trivial.
+Recent work has explored related ideas.
+T-Stitch \citep{tstitch2024} and SRDiffusion \citep{srdiffusion2025}
+both propose splitting the denoising trajectory between models at the
+noise-step level: the small model handles certain steps and the large
+model handles others.
+MoDM \citep{modm2025} routes entire generation requests between models
+at the serving system level based on a caching mechanism.
+While effective in their respective settings, these approaches were not
+designed for autoregressive video generation and carry meaningful
+limitations.
+T-Stitch and SRDiffusion rely on fixed, content-agnostic step splits---the
+same routing rule applies to every block regardless of whether the draft
+produces high- or low-quality output for that block, and they provide
+no mechanism to detect and recover from bad drafts.
+MoDM depends on cache hits to deliver speedup and offers no per-block
+quality guarantee.
+Critically, all three methods require step-level trajectory engineering or
+system-level infrastructure, raising the barrier to deployment.
 
-\textbf{We present RGSD-Video}, which makes the following contributions:
-\begin{enumerate}
-  \item \textbf{Speculative block decoding for video.}
-    A 1.3B draft model (Wan2.1-T2V-1.3B) generates candidate blocks that
-    a 14B target model (Krea Realtime Video 14B) re-generates only when
-    necessary, yielding a 1.66$\times$ speedup.
+A further challenge distinguishes video from LLMs: classical speculative
+decoding accepts or rejects drafts via exact token-probability comparisons
+\citep{leviathan2023fast}.
+Video blocks are continuous, high-dimensional spatiotemporal tensors with
+no associated logit distribution, making token-level verification
+inapplicable.
+This leaves \emph{reward-guided speculative generation for autoregressive
+video} as an open problem.
 
-  \item \textbf{ImageReward routing with worst-frame scoring.}
-    We use ImageReward \citep{imagereward2024} to score each decoded draft
-    block and take the \emph{minimum} frame score as the routing signal,
-    detecting single-frame artifacts that block-average scores conceal.
-
-  \item \textbf{Globally adaptive percentile threshold.}
-    A running pool of all observed draft scores across prompts sets the
-    acceptance threshold at the empirical quantile $1-\alphaeff$, with a
-    Gaussian prior for cold-start.
-    No held-out calibration set is required.
-
-  \item \textbf{Mandatory first-block regeneration.}
-    Block $b=0$ is always regenerated by the target, anchoring scene
-    composition for all subsequent blocks.
-\end{enumerate}
-
-On 200 MovieGenVideoBench prompts at $832{\times}480$ on NVIDIA RTX A6000,
-RGSD-Video achieves VisionReward $=0.0676$ (target: $0.0696$;
-draft-only: $0.0549$) at 67.5\,s/video vs.\ 112.0\,s for target-only
-($1.66\times$ speedup) and 36.5\,s for draft-only.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Related Work}
-
-\paragraph{Video generation.}
-Diffusion-based video models have scaled from pixel-space approaches
-\citep{yang2024video} to large latent transformers such as Sora
-\citep{openaisora2024} and Movie Gen \citep{moviegen2024}.
-Wan 2.1 \citep{wan2025} provides open-source 1.3B and 14B models.
-Self-Forcing \citep{selfforcing2025} distills a large video transformer
-into a block-based autoregressive generator via self-generated conditioning
-during training, enabling single-GPU streaming.
-Our work builds on Self-Forcing as the backbone.
-
-\paragraph{Fast diffusion inference.}
-Step distillation \citep{yin2024onestepdiffusion} and flow-matching
-schedulers \citep{liu2023flow} reduce denoising steps needed.
-DistriFusion \citep{he2024distrifusion} parallelizes diffusion across GPUs.
-Our approach is orthogonal: we selectively route blocks to a cheaper model.
-
-\paragraph{Speculative decoding.}
-\citet{leviathan2023fast} and \citet{chen2023accelerating} introduced
-speculative decoding for LLMs; subsequent work explored learned drafters and
-tree-structured speculation.
-\citet{rsd2025} introduced Reward-Guided Speculative Decoding for LLM
-reasoning via a process reward model.
-We adapt reward-guided routing to video blocks, replacing the process
-reward model with ImageReward and adapting threshold mechanisms to block
-granularity.
-
-\paragraph{Quality-aware generation.}
-ImageReward \citep{imagereward2024} scores text-image alignment and
-aesthetics from human preference data.
-VisionReward \citep{visionreward2025} extends this to video via 29-dimension
-VQA evaluation.
-Prior work has used reward signals for training (RLHF for image generation)
-but not, to our knowledge, for \emph{inference-time routing} in video
-diffusion.
+In this work, we propose \textbf{Reward-Guided Speculative Video
+Generation} (\textbf{RSVG}), a training-free, plug-and-play framework
+that requires no architectural changes to either the drafter or target.
+For each video block, the drafter generates a candidate; an
+image quality router then decides, per
+block, whether to accept the draft or invoke the target for
+regeneration.
+Our key insight is that a plain image-quality signal, applied
+block-by-block with a globally adaptive threshold, is sufficient to match
+target-only quality without any step-level trajectory engineering---simplicity
+is a feature, not a limitation.
+On 200 MovieGenVideoBench prompts at $832{\times}480$ resolution, RSVG
+achieves $97.1\%$ of target-only VisionReward quality ($0.0676$
+vs.\ $0.0696$) at a $\mathbf{1.66\times}$ speedup, while improving over
+draft-only by $+23.1\%$.
+Importantly, RSVG is \emph{orthogonal} to step-level methods such as
+T-Stitch or SRDiffusion, which can be directly applied to the target
+model's generation steps within RSVG, providing a composable path to
+further speedup.
+Our main contributions are as follows:
+\begin{itemize}
+  \item We propose RSVG, a training-free speculative generation framework
+    for autoregressive video diffusion that routes each block between a
+    drafter and a target based on image quality routing,
+    achieving a $1.66\times$ speedup with $97.1\%$ quality retention.
+  \item We identify three video-specific design choices critical to making
+    reward-guided routing effective: mandatory first-block regeneration to
+    anchor scene composition, worst-frame quality scoring to surface
+    single-frame artifacts masked by block averages, and a globally
+    adaptive running-percentile threshold that self-calibrates without any
+    held-out calibration data.
+  \item We demonstrate that RSVG is orthogonal to step-level acceleration
+    methods (T-Stitch, SRDiffusion), and show that without any complex
+    step-level trajectory engineering, a plain reward routing signal
+    suffices to match large-model quality---establishing a new,
+    simpler baseline for collaborative video generation.
+\end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Background}
 
-\subsection{Self-Forcing Autoregressive Video Generation}
+\subsection{Video Generation}
+
+Diffusion-based video models have progressed rapidly from pixel-space
+approaches \citep{yang2024video} to large latent transformer architectures
+\citep{openaisora2024,moviegen2024}.
+Wan 2.1 \citep{wan2025} provides open-source 1.3B and 14B video generation
+models that serve as the backbone models in this work.
+Inference efficiency has been improved through step distillation
+\citep{yin2024onestepdiffusion}, flow-matching schedulers
+\citep{liu2023flow}, and distributed parallelism \citep{he2024distrifusion},
+though these approaches are orthogonal to---and composable with---the
+routing-based framework we propose.
+
+\subsection{Autoregressive Video Generation}
 
 Self-Forcing \citep{selfforcing2025} trains a causal video diffusion
 transformer $\Target$ to generate video block-by-block.
@@ -219,149 +236,193 @@ A video of $N$ frames is divided into $B$ blocks of $F$ frames each
 At inference, block $b$ is generated by running $S{=}4$ denoising steps of
 the transformer conditioned on the text prompt and a key-value (KV) cache
 $\mathbf{K}_b$ accumulating representations of prior blocks $0,\ldots,b-1$.
-
+This design eliminates exposure bias and enables streaming generation.
 The system includes a smaller \emph{drafter} $\Drafter$ with the same
 block-based autoregressive architecture but only 1.3B parameters vs.\ 14B
 for $\Target$.
 Both models use 4 denoising steps with shared schedule
 $[1000, 937, 833, 625, 0]$.
 
-\subsection{Speculative Decoding in LLMs}
+\subsection{Hierarchical Video Generation}
 
-In LLM speculative decoding \citep{leviathan2023fast,chen2023accelerating},
-a draft model proposes $k$ tokens that the target verifies in one forward
-pass; accepted tokens are kept and the first rejected token triggers target
-correction.
-RSD \citep{rsd2025} relaxes this to biased acceptance: a reward model
-evaluates intermediate steps and accepts drafts exceeding a threshold,
-tolerating a small quality bias in exchange for a large speedup.
-We apply analogous biased routing at video block granularity.
+A natural strategy to reduce inference cost is to assign different parts of
+the generation process to models of different capacities.
+T-Stitch \citep{tstitch2024} observes that diffusion models trained on the
+same data distribution learn similar latent encodings and exploits this to
+stitch trajectories across model sizes: a small model handles the
+high-noise early denoising steps while a large model refines the output
+in the low-noise later steps, achieving training-free acceleration without
+quality loss.
+SRDiffusion \citep{srdiffusion2025} adopts a complementary noise-level
+split---the large model ``sketches'' global structure in the high-noise
+phase while the small model ``renders'' visual details in the low-noise
+phase---and reports up to $3\times$ speedup for Wan and $2\times$ for
+CogVideoX.
+MoDM \citep{modm2025} operates at the serving-system level, routing entire
+generation requests to a small model on cache hits and to a large model
+on misses, reducing average serving time by $2.5\times$.
+While these methods demonstrate the value of model collaboration, they
+rely on fixed, content-agnostic splits at the denoising step level and
+were not designed for block-level autoregressive video generation.
+RSVG is orthogonal to all three: T-Stitch and SRDiffusion can be directly
+applied to the target model's generation steps within RSVG, providing a
+composable path to further speedup.
+
+\subsection{Speculative Decoding}
+
+Speculative decoding \citep{leviathan2023fast,chen2023accelerating}
+accelerates LLM inference by pairing a small draft model with a large
+target model: the draft generates candidate tokens autoregressively, and
+the target verifies them in a single forward pass via rejection sampling,
+preserving the target's output distribution exactly.
+Subsequent work has explored learned drafters, tree-structured speculation,
+and cross-architecture draft--target pairs.
+RSD \citep{rsd2025} extends speculative decoding to chain-of-thought
+reasoning by shifting acceptance from the token level to the step level:
+a Process Reward Model (PRM) scores entire reasoning steps, accepting a
+draft step when its PRM score exceeds a global threshold and otherwise
+regenerating with the target.
+RSVG draws direct inspiration from RSD but addresses the fundamental
+difference that video blocks carry no discrete token distribution---making
+exact rejection sampling inapplicable---and replaces the PRM with an
+image quality model that scores decoded draft frames as a proxy for
+block-level generation quality.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\section{Method: RGSD-Video}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Method: RSVG}
 \label{sec:method}
 
-\subsection{Problem Formulation}
-
-Given text prompt $p$, drafter $\Drafter$ (1.3B), and target $\Target$ (14B),
+Given text prompt $p$, drafter $\Drafter$ and target $\Target$,
 we seek a routing policy $\pi: \mathbb{R} \to \{0,1\}$ that maps a
 per-block quality score $\score_b \in \mathbb{R}$ to accept (1) or
 reject (0), optimizing the trade-off between video quality and inference
 speed.
 
-\subsection{Speculative Block Decoding}
+\subsection{RSVG-Static}
 
-For each block $b$, we first run $\Drafter$ through all $S$ denoising steps
-to obtain draft prediction $\hat{\mathbf{x}}_b$.
-The drafter KV cache $\mathbf{K}^{\Drafter}$ is updated with the draft's
-latent representation regardless of the routing decision, ensuring the
-drafter always conditions on its own prior predictions.
+\textbf{Inference flow.}
+For each block $b$, $\Drafter$ runs $S$ denoising steps to produce a
+candidate $\hat{\mathbf{x}}_b$.
+The drafter KV cache $\mathbf{K}^{\Drafter}$ is updated unconditionally,
+ensuring $\Drafter$ always conditions on its own prior outputs.
+The candidate is decoded by the VAE and scored by the router.
+If $\score_b \geq \threshold$, the draft is \emph{accepted}:
+$\hat{\mathbf{x}}_b$ is committed to the target's KV cache
+$\mathbf{K}^{\Target}$ and the decoded frames are emitted directly.
+If \emph{rejected}, $\Target$ runs $S$ denoising steps from the same
+initial noise to produce $\mathbf{x}^*_b$, updating $\mathbf{K}^{\Target}$.
+The VAE decode cache is cloned before draft scoring and restored on
+rejection to prevent temporal inconsistency across blocks.
+In RSVG-Static the threshold $\threshold$ is a fixed scalar calibrated
+offline.
 
-If the draft is \emph{accepted}, $\hat{\mathbf{x}}_b$ is also committed to
-the target's KV cache $\mathbf{K}^{\Target}$.
-If \emph{rejected}, $\Target$ runs all $S$ steps from the same initial
-noise to produce $\mathbf{x}^*_b$ and updates $\mathbf{K}^{\Target}$.
-The VAE decode cache (used for temporal consistency in the causal VAE
-decoder) is cloned before draft scoring; on rejection it is restored
-prior to decoding the target output, preventing cache corruption.
-
-\subsection{ImageReward Routing}
-
-\paragraph{Frame-level quality scoring.}
-Draft block $\hat{\mathbf{x}}_b$ is decoded by the VAE to pixel frames
-$\{\mathbf{f}^{(b)}_1, \ldots, \mathbf{f}^{(b)}_F\}$.
-Each frame is scored by ImageReward:
+\textbf{Worst-frame aggregation.}
+The block quality score is the \emph{minimum} per-frame reward over the
+$F$ decoded frames:
 \begin{equation}
-  r_i^{(b)} = \ImageReward\!\left(\mathbf{f}^{(b)}_i,\, p\right), \quad i = 1, \ldots, F.
-\end{equation}
-
-\paragraph{Worst-frame aggregation.}
-The block quality score is the \emph{minimum} frame score:
-\begin{equation}
-  \score_b = \min_{i=1}^{F} r_i^{(b)}.
+  \score_b = \min_{i=1}^{F}
+  \ImageReward\!\left(\mathbf{f}^{(b)}_i,\, p\right).
   \label{eq:minscore}
 \end{equation}
-Using the minimum rather than the average catches blocks with one severely
+Here $\ImageReward(\mathbf{f}, p)$ denotes the reward of a single decoded
+frame $\mathbf{f}$ given prompt $p$.
+Using the minimum rather than the mean catches blocks with one severely
 degraded frame---a visual artifact that average scoring would mask.
-Empirically, accepted blocks have mean ImageReward $0.768\pm0.705$ while
-rejected blocks score $-0.995\pm0.604$, a clear 1.76-point gap.
+Empirically, accepted blocks achieve mean reward $0.768\pm0.705$
+while rejected blocks score $-0.995\pm0.604$, a 1.76-point gap that
+validates the router as a reliable routing signal.
 
-\paragraph{Force-reject the first block.}
-Block $b=0$ is always regenerated by $\Target$: it lacks KV context and
-establishes scene composition that all subsequent blocks inherit through
-the shared KV cache.
+\textbf{Force-reject the first block.}
+Block $b=0$ is always regenerated by $\Target$, regardless of its draft
+score.
+Block 0 lacks any KV context from prior blocks and establishes the scene
+composition, foreground subjects, and visual style that all subsequent
+blocks inherit through the shared cache.
+Accepting a draft at this position risks propagating irreversible layout
+errors throughout the video.
 
-\subsection{Globally Adaptive Threshold}
+\subsection{RSVG-Dynamic}
 
-\paragraph{Effective accept rate.}
-Because block 0 is always rejected, scored blocks ($b \geq 1$) must
-achieve a higher accept rate to maintain the overall target $\alpha$:
+A fixed threshold requires a held-out calibration set and may fail to
+generalize across prompts with differing score distributions.
+RSVG-Dynamic removes this requirement by estimating the threshold on the
+fly from scores accumulated during inference.
+
+\textbf{Effective accept rate.}
+The overall target accept rate $\alpha$ (fraction of all $B$ blocks
+accepted) cannot be directly applied to scored blocks, because block 0 is
+always rejected.
+The effective accept rate for the remaining $B-1$ scored blocks is:
 \begin{equation}
   \alphaeff = \frac{\alpha \cdot B}{B - 1}.
   \label{eq:effective-rate}
 \end{equation}
-With $\alpha{=}0.72$ and $B{=}9$: $\alphaeff = 0.81$.
+With $\alpha{=}0.72$ and $B{=}9$, this gives $\alphaeff = 0.81$.
 
-\paragraph{Running-percentile threshold.}
-Let $\mathcal{S}_t$ be the pool of all min-frame scores observed across
-all prompts and blocks up to time $t$.
-The adaptive threshold is:
+\textbf{Running-percentile threshold.}
+Let $\mathcal{S}_t$ denote the pool of all min-frame scores accumulated
+across all prompts and scored blocks up to time $t$.
+The adaptive threshold is set at the $(1-\alphaeff)$-quantile of this
+pool:
 \begin{equation}
   \threshold_t = Q_{1 - \alphaeff}(\mathcal{S}_t),
   \label{eq:threshold}
 \end{equation}
-where $Q_p$ denotes the empirical $p$-th quantile.
-Accumulating scores across prompts lets the threshold automatically adapt
-to the score distribution, maintaining the aggregate accept rate.
+where $Q_p$ denotes the empirical $p$-th quantile (linear interpolation).
+Because scores accumulate across prompts, the threshold self-calibrates
+to maintain the target accept rate without any held-out data.
 
-\paragraph{Warmup prior.}
-For $|\mathcal{S}_t| < 5$, we use a Gaussian prior:
+\textbf{Gaussian warmup prior.}
+When $|\mathcal{S}_t| < 5$, the empirical quantile is unreliable.
+We substitute a Gaussian prior:
 \begin{equation}
   \threshold_t = \mu_0 + \sigma_0 \cdot \Phi^{-1}(1 - \alphaeff),
   \label{eq:warmup}
 \end{equation}
-where $(\mu_0, \sigma_0) = (0.566, 1.071)$ are calibrated from a
+where $(\mu_0, \sigma_0) = (0.566, 1.071)$ are estimated from a small
 development set and $\Phi^{-1}$ is the probit function.
+After 5 observations the threshold transitions to the empirical quantile.
 
-\subsection{Complete Algorithm}
-
-\begin{myalgorithm}[RGSD-Video Inference]
-\label{alg:rgsd}
-\kwRequire text prompt $p$, blocks $B$, target rate $\alpha$,\\
-\hspace{3.5em}drafter $\Drafter$, target $\Target$, ImageReward $\ImageReward$,\\
-\hspace{3.5em}prior $(\mu_0, \sigma_0)$\\
+\begin{myalgorithm}[RSVG-Dynamic Inference]
+\label{alg:rsvg}
+\kwRequire text prompt $p$, blocks $B$, target rate $\alpha$,
+drafter $\Drafter$, target $\Target$, router $\ImageReward$,
+prior $(\mu_0, \sigma_0)$\\
 \kwEnsure generated blocks $\mathbf{x}_{0:B-1}$
 
 \Lstate{$\mathcal{S} \leftarrow [\,]$\Comment{running score pool}}
 \Lstate{$\alphaeff \leftarrow \alpha \cdot B / (B - 1)$}
-\Lstate{Init KV caches $\mathbf{K}^{\Drafter}, \mathbf{K}^{\Target}$, VAE cache $\mathbf{c}$}
+\Lstate{Init $\mathbf{K}^{\Drafter}$, $\mathbf{K}^{\Target}$, VAE cache $\mathbf{c}$}
 \Lstate{\kwFor{$b = 0, 1, \ldots, B-1$}:}
-\LstateII{$\hat{\mathbf{x}}_b \leftarrow \textsc{Denoise}(\Drafter, p, \mathbf{K}^{\Drafter})$}
+\LstateII{$\hat{\mathbf{x}}_b \leftarrow \textsc{Denoise}(\Drafter, p, \mathbf{K}^{\Drafter})$;\quad update $\mathbf{K}^{\Drafter}$}
 \LstateII{\kwIf{$b = 0$}: \textit{accept} $\leftarrow$ \textsc{False}\Comment{force-reject}}
 \LstateII{\kwElse:}
 \LstateIII{$\mathbf{c}' \leftarrow \mathbf{c}.\text{clone}()$\Comment{save VAE cache}}
 \LstateIII{$\{\mathbf{f}_i\}, \mathbf{c}_{\text{new}} \leftarrow \VAE(\hat{\mathbf{x}}_b, \mathbf{c})$}
-\LstateIII{$\score_b \leftarrow \min_i \ImageReward(\mathbf{f}_i, p)$\Comment{worst-frame}}
-\LstateIII{Compute $\threshold_t$ via Eq.~(\ref{eq:threshold}) or (\ref{eq:warmup})}
-\LstateIII{$\mathcal{S}.\text{append}(\score_b)$;\quad \textit{accept} $\leftarrow$ $(\score_b \geq \threshold_t)$}
-\LstateII{\kwIf{\textit{accept}}: $\mathbf{x}_b \leftarrow \hat{\mathbf{x}}_b$;\quad $\mathbf{c} \leftarrow \mathbf{c}_{\text{new}}$; update $\mathbf{K}^{\Target}$}
+\LstateIII{$\score_b \leftarrow \min_i \ImageReward(\mathbf{f}_i, p)$;\quad $\mathcal{S}.\text{append}(\score_b)$}
+\LstateIII{$\threshold \leftarrow Q_{1-\alphaeff}(\mathcal{S})$ if $|\mathcal{S}|\!\geq\!5$, else Eq.~(\ref{eq:warmup})}
+\LstateIII{\textit{accept} $\leftarrow (\score_b \geq \threshold)$}
+\LstateII{\kwIf{\textit{accept}}: $\mathbf{x}_b \leftarrow \hat{\mathbf{x}}_b$;\quad $\mathbf{c} \leftarrow \mathbf{c}_{\text{new}}$;\quad update $\mathbf{K}^{\Target}$}
 \LstateII{\kwElse:}
 \LstateIII{$\mathbf{c} \leftarrow \mathbf{c}'$\Comment{restore VAE cache}}
-\LstateIII{$\mathbf{x}_b \leftarrow \textsc{Denoise}(\Target, p, \mathbf{K}^{\Target})$}
+\LstateIII{$\mathbf{x}_b \leftarrow \textsc{Denoise}(\Target, p, \mathbf{K}^{\Target})$;\quad update $\mathbf{K}^{\Target}$}
 \Lstate{\kwReturn $\mathbf{x}_{0:B-1}$}
 \end{myalgorithm}
 
-\paragraph{Computational cost analysis.}
-Let $t_{\Drafter}$ and $t_{\Target}$ denote per-block inference times and
-$\alpha_s = \alphaeff$ the scored-block accept rate.
-RGSD-Video runs $\Drafter$ every block (cheap), and $\Target$ for
-block 0 (forced) plus fraction $1-\alpha_s$ of blocks 1--8.
-At $\alpha_s = 0.734$ and a 10$\times$ model size ratio,
-the expected speedup vs.\ target-only is:
+\paragraph{Computational cost.}
+Let $t_{\Drafter}$ and $t_{\Target}$ denote per-block inference times.
+RSVG runs $\Drafter$ on every block and $\Target$ only for block 0
+(forced) plus fraction $1-\alphaeff$ of blocks $1\ldots B-1$.
+At $\alphaeff = 0.734$ and a $10\times$ model-size ratio, the expected
+speedup over target-only is:
 \[
-  \text{Speedup} \approx \frac{1}{1/B + (1-1/B)\,[1/10 + (1-\alpha_s)]} \approx 1.6\times,
+  \text{Speedup} \approx
+  \frac{1}{\tfrac{1}{B} + \left(1-\tfrac{1}{B}\right)
+  \!\left[\tfrac{1}{10} + (1-\alphaeff)\right]}
+  \approx 1.6\times,
 \]
-consistent with the observed 1.66$\times$.
+consistent with the observed $1.66\times$.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Experiments}
@@ -400,10 +461,10 @@ Wall-clock inference time per video (excludes model loading and warmup).
 \subsection{Main Results}
 
 Table~\ref{tab:main} summarizes the results.
-RGSD-Video achieves VisionReward $= 0.0676$ vs.\ target-only $0.0696$
+RSVG achieves VisionReward $= 0.0676$ vs.\ target-only $0.0696$
 (gap: $-2.9\%$) at $67.5$\,s/video vs.\ $112.0$\,s (\textbf{1.66$\times$
 speedup}).
-Compared to draft-only ($0.0549$), RGSD-Video improves quality by
+Compared to draft-only ($0.0549$), RSVG improves quality by
 $+23.1\%$ relative while being only $1.85\times$ slower.
 
 \begin{table}[t]
@@ -420,7 +481,7 @@ $+23.1\%$ relative while being only $1.85\times$ slower.
     Method & VR $\uparrow$ & Std $\downarrow$ & Time & Speedup \\
     \midrule
     Draft-only        & 0.0549 & 0.0826 & 36.5\,s & 3.07$\times$ \\
-    \textbf{RGSD (ours)} & \textbf{0.0676} & \textbf{0.0758} & 67.5\,s & \textbf{1.66$\times$} \\
+    \textbf{RSVG (ours)} & \textbf{0.0676} & \textbf{0.0758} & 67.5\,s & \textbf{1.66$\times$} \\
     Target-only       & 0.0696 & 0.0744 & 112.0\,s & 1.00$\times$ \\
     \bottomrule
   \end{tabular}
@@ -429,7 +490,7 @@ $+23.1\%$ relative while being only $1.85\times$ slower.
 \end{table}
 
 The reduction in score variance is notable: draft-only $\sigma{=}0.0826$
-shrinks to $0.0758$ for RGSD-Video (close to target-only $0.0744$).
+shrinks to $0.0758$ for RSVG (close to target-only $0.0744$).
 This is a hallmark of quality filtering: low-quality tail events are
 selectively replaced by the target model, compressing the score distribution
 toward the upper end.
@@ -441,7 +502,7 @@ toward the upper end.
     \textbf{VisionReward distributions.}
     Left: violin plots over 200 prompts.
     Right: mean $\pm$ std.
-    RGSD-Video (orange) matches target-only (green) while substantially
+    RSVG (orange) matches target-only (green) while substantially
     outperforming draft-only (blue); variance reduction reflects quality
     filtering.
   }
@@ -453,7 +514,7 @@ toward the upper end.
   \includegraphics[width=\linewidth]{figures/quality_speed_tradeoff}
   \caption{%
     \textbf{Quality--speed Pareto curve.}
-    RGSD-Video achieves $97.1\%$ of target quality at $1.66\times$ the
+    RSVG achieves $97.1\%$ of target quality at $1.66\times$ the
     speed.
   }
   \label{fig:pareto}
@@ -531,7 +592,7 @@ scored blocks), the empirical quantile is well-estimated.
 \section{Limitations}
 
 \textbf{Distributional bias.}
-Unlike exact-rejection LLM speculative decoding, RGSD-Video accepts a
+Unlike exact-rejection LLM speculative decoding, RSVG accepts a
 distributional shift toward the drafter; the $-2.9\%$ VisionReward gap
 reflects this.
 A lower accept rate reduces the gap at the cost of speedup.
@@ -549,16 +610,16 @@ Batching or speculative VAE decoding could reduce this overhead.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Conclusion}
 
-We presented RGSD-Video, a reward-guided speculative decoding framework
+We presented RSVG, a reward-guided speculative video generation framework
 for autoregressive video diffusion that achieves 97.1\% of target quality
 at 1.66$\times$ speedup.
 The key innovations---forced first-block regeneration, worst-frame quality
 scoring, and a globally adaptive percentile threshold---address the specific
 challenges of block-level video speculative decoding.
-The clear separation in ImageReward scores between accepted and rejected
+The clear separation in router scores between accepted and rejected
 drafts (mean gap 1.76) validates that an image-level quality model serves
 as a reliable routing signal for video blocks with minimal calibration.
-RGSD-Video can be applied to any Self-Forcing-style autoregressive video
+RSVG can be applied to any Self-Forcing-style autoregressive video
 model with a drafter-target pair, opening the door to reward-guided
 inference-time compute allocation for video generation.
 
