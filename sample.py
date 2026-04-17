@@ -14,8 +14,6 @@ from release_server import (
     GenerateParams,
     GenerationSession,
     Models,
-    get_routing_stats,
-    reset_routing_stats,
 )
 
 torch.set_grad_enabled(False)
@@ -257,28 +255,6 @@ def sample_videos(
         # Clean up session
         session.dispose()
     
-    # Print routing statistics
-    stats = get_routing_stats()
-    if stats["scores"]:
-        import statistics
-        scores = stats["scores"]
-        total = stats["accepted"] + stats["rejected"]
-        mean_score = statistics.mean(scores)
-        var_score = statistics.variance(scores) if len(scores) > 1 else 0.0
-        std_score = statistics.stdev(scores) if len(scores) > 1 else 0.0
-        print("\n" + "=" * 60)
-        print("ImageReward Routing Statistics")
-        print("=" * 60)
-        print(f"Total blocks:    {total}")
-        print(f"Accepted:        {stats['accepted']} ({stats['accepted']/total*100:.1f}%)")
-        print(f"Rejected:        {stats['rejected']} ({stats['rejected']/total*100:.1f}%)")
-        print(f"Draft score mean: {mean_score:.6f}")
-        print(f"Draft score var:  {var_score:.6f}")
-        print(f"Draft score std:  {std_score:.6f}")
-        print(f"Draft score min:  {min(scores):.6f}")
-        print(f"Draft score max:  {max(scores):.6f}")
-        print("=" * 60)
-
     print("\n🎉 All videos generated successfully!")
     return results
 
