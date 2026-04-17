@@ -25,7 +25,7 @@ print(f"Loaded {len(prompts)} prompts from {PROMPT_FILE}")
 sample_videos(
     prompts_list=prompts,
     config_path="configs/self_forcing_server_14b.yaml",
-    output_dir=os.getenv("OUTPUT_DIR", "outputs/samples"),
+    output_dir="outputs/force_reject_random",
     params=params,
     save_videos=True,  # Requires ffmpeg
     fps=24,
