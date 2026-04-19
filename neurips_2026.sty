@@ -92,13 +92,8 @@
 \ProcessOptions\relax
 
 % fonts
-\renewcommand{\rmdefault}{lmr}
-% phv (Helvetica) requires texlive-fonts-recommended; fall back to lmss if unavailable
-\IfFileExists{phvr8t.tfm}{%
-  \renewcommand{\sfdefault}{phv}
-}{%
-  \renewcommand{\sfdefault}{lmss}
-}
+\renewcommand{\rmdefault}{ptm}
+\renewcommand{\sfdefault}{phv}
 
 % change this every year for notice string at bottom
 \newcommand{\@neuripsordinal}{40th}

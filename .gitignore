@@ -13,7 +13,7 @@
 *.nav
 *.snm
 *.vrb
-neurips_2026.pdf
+main.pdf
 
 # Python
 __pycache__/

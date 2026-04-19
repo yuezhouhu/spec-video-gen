@@ -155,44 +155,59 @@ plt.close()
 print("Saved figures/routing_analysis.pdf")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Figure 3: Quality–Speed trade-off scatter plot
+# Figure 3: Quality–Speed Pareto curve (fixed-threshold sweep, 1003 prompts)
 # ─────────────────────────────────────────────────────────────────────────────
-fig, ax = plt.subplots(figsize=(6, 4.5))
+fig, ax = plt.subplots(figsize=(6, 3.5))
 
-times  = [36.5, 67.5, 112.0]
-scores = [0.0549, 0.0676, 0.0696]
-colors3 = ['#4C72B0', '#DD8452', '#55A868']
-labels3 = ['Draft-only', 'RGSD (ours)', 'Target-only']
-sizes   = [80, 150, 80]
-markers = ['o', '*', 'o']
+# Data from 1003-prompt fixed-threshold experiments (total wall-clock minutes)
+pareto_data = [
+    # (label,        VR,     time_s, marker, size, color)
+    ('Draft-only',            0.0644, 25.7, 'o', 80, '#4C72B0'),
+    ('RSVG (ours)',           0.0773, 60.9, '*',150, '#DD8452'),
+    ('Target-only',           0.0788, 97.0, 'o', 80, '#55A868'),
+]
 
-for t, s, c, l, sz, mk in zip(times, scores, colors3, labels3, sizes, markers):
-    ax.scatter(t, s, c=c, s=sz*3, marker=mk, zorder=5, edgecolors='black',
-               linewidths=1.5, label=l)
+# Connecting line (sorted by time)
+p_times  = [d[2] for d in pareto_data]
+p_scores = [d[1] for d in pareto_data]
+ax.plot(p_times, p_scores, '--', color='gray', alpha=0.5, zorder=1)
+
+# Scatter points (no legend labels — each point has its own annotation)
+for label, vr, t, mk, sz, c in pareto_data:
+    ax.scatter(t, vr, c=c, s=sz*3, marker=mk, zorder=5,
+               edgecolors='black', linewidths=1.0)
 
 # Annotations
-offsets = [(-35, 0.002), (5, 0.002), (3, -0.004)]
-for t, s, l, off in zip(times, scores, labels3, offsets):
-    ax.annotate(l, (t, s), xytext=(t + off[0], s + off[1]), fontsize=9,
-                arrowprops=dict(arrowstyle='->', color='gray', lw=1))
+ann_offsets = {
+    'Draft-only':    (5, 0.0018),
+    'RSVG (ours)':   (-8, 0.0018),
+    'Target-only':   (-12, -0.0022),
+}
+for label, vr, t, mk, sz, c in pareto_data:
+    off = ann_offsets[label]
+    ax.annotate(label, (t, vr), xytext=(t + off[0], vr + off[1]), fontsize=9,
+                arrowprops=dict(arrowstyle='->', color='gray', lw=0.8))
 
-ax.set_xlabel('Inference Time per Video (seconds) ↓', fontsize=11)
+# Speedup annotations
+draft_t = pareto_data[0][2]
+rsvg_t = pareto_data[1][2]
+target_t = pareto_data[2][2]
+# RSVG vs Target-only
+ax.annotate('', xy=(rsvg_t, 0.0685), xytext=(target_t, 0.0685),
+            arrowprops=dict(arrowstyle='<->', color='dimgray', lw=1.5))
+ax.text((rsvg_t + target_t) / 2, 0.0675, f'{target_t/rsvg_t:.2f}× speedup',
+        ha='center', fontsize=8.5, color='dimgray')
+# Draft-only vs Target-only
+ax.annotate('', xy=(draft_t, 0.0620), xytext=(target_t, 0.0620),
+            arrowprops=dict(arrowstyle='<->', color='dimgray', lw=1.5))
+ax.text((draft_t + target_t) / 2, 0.0610, f'{target_t/draft_t:.2f}× speedup',
+        ha='center', fontsize=8.5, color='dimgray')
+
+ax.set_xlabel('Average Time per Video (seconds) ↓', fontsize=11)
 ax.set_ylabel('VisionReward Score ↑', fontsize=11)
-ax.set_title('Quality–Speed Pareto Curve\n(VisionReward vs. Inference Time)', fontsize=10)
 ax.grid(alpha=0.3)
-ax.set_xlim(20, 130)
-ax.set_ylim(0.045, 0.080)
-
-# Pareto frontier line
-ax.plot([36.5, 67.5, 112.0], [0.0549, 0.0676, 0.0696], '--', color='gray', alpha=0.5, zorder=1)
-
-# Speedup annotation
-ax.annotate('', xy=(36.5, 0.055), xytext=(112.0, 0.055),
-            arrowprops=dict(arrowstyle='<->', color='dimgray', lw=1.5))
-ax.text(74, 0.052, '3.07× speedup', ha='center', fontsize=8.5, color='dimgray')
-ax.annotate('', xy=(67.5, 0.060), xytext=(112.0, 0.060),
-            arrowprops=dict(arrowstyle='<->', color='dimgray', lw=1.5))
-ax.text(90, 0.057, '1.66×', ha='center', fontsize=8.5, color='dimgray')
+ax.set_xlim(15, 110)
+ax.set_ylim(0.058, 0.084)
 
 plt.tight_layout()
 plt.savefig('figures/quality_speed_tradeoff.pdf', bbox_inches='tight', dpi=150)
