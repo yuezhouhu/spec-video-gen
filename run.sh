@@ -1,0 +1,1 @@
+RANDOM_ACCEPT_RATE=0.7 NUM_PROMPTS=1003 CUDA_VISIBLE_DEVICES=0,1 nohup python -u sample_run.py > logs/ablation_random.log 2>&1 &
