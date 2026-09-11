@@ -884,6 +884,11 @@ class GenerationSession:
         draft_denoised_pred = denoised_pred
         already_decoded = False
 
+        if (self.params.width, self.params.height) != (832, 480):
+            ctx = torch.compiler.set_stance("force_eager")
+        else:
+            ctx = torch.compiler.set_stance("default")
+
         if self.block_idx == 0:
             accept = False
             log.info(f"Block {self.block_idx}: Force reject (first block)")
