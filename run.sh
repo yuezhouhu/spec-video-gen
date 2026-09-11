@@ -1,0 +1,1 @@
+NUM_PROMPTS=1003 CUDA_VISIBLE_DEVICES=0,1 nohup python -u sample_run.py > logs/force_reject.log 2>&1 &
