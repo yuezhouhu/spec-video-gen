@@ -147,11 +147,12 @@ can be seamlessly integrated into existing autoregressive video generation pipel
     \caption{%
       \textbf{Qualitative comparison on MovieGenVideoBench.}
       Each row shows 4 uniformly sampled frames from a generated video.
-      Draft-only (left) is fast but produces lower-fidelity output;
-      Target-only (right) achieves the highest quality at the cost of
+      Draft-only (top) is fast but produces lower-fidelity output;
+      Target-only (bottom) achieves the highest quality at the cost of
       slow inference.
-      \texttt{SDVG} (center) closely matches target quality while running
-      \textbf{1.59$\times$ faster}.
+      \texttt{SDVG} closely matches target quality while running
+      \textbf{1.59$\times$ faster}, and \texttt{SDVG}-hybrid matches it at
+      \textbf{1.96$\times$}.
       Prompts: (top) ``Drone view of waves crashing against the rugged
       cliffs along Big Sur\ldots'';
       (bottom) ``A stylish woman walks down a Tokyo street\ldots''.
@@ -284,8 +285,10 @@ replace the PRM with an image quality model as a block-level proxy.
   \label{fig:pipeline}
 \end{figure}
 
-\section{Method: \texttt{SDVG}}
+\section{Method}
 \label{sec:method}
+
+\subsection{\texttt{SDVG}: Block-Level Speculation}
 
 Given text prompt $p$, drafter $\Drafter$ and target $\Target$,
 we seek a routing policy $\pi: \mathbb{R} \to \{0,1\}$ that maps a
@@ -302,8 +305,8 @@ The candidate is decoded by the VAE and scored by the router.
 If $\score_b \geq \threshold$, the draft is \emph{accepted}:
 $\hat{\mathbf{x}}_b$ is committed to the target's KV cache
 $\mathbf{K}^{\Target}$ and the decoded frames are emitted directly.
-If \emph{rejected}, $\Target$ runs $S$ denoising steps from the same
-initial noise to produce $\mathbf{x}^*_b$, updating $\mathbf{K}^{\Target}$.
+If \emph{rejected}, $\Target$ regenerates the block and updates
+$\mathbf{K}^{\Target}$.
 The VAE decode cache is cloned before draft scoring and restored on
 rejection to prevent temporal inconsistency across blocks.
 In \texttt{SDVG} the threshold $\threshold$ is a fixed scalar calibrated
@@ -330,6 +333,70 @@ composition, foreground subjects, and visual style that all subsequent
 blocks inherit through the shared cache.
 Accepting a draft at this position risks propagating irreversible layout
 errors throughout the video.
+
+\subsection{\texttt{SDVG}-hybrid: Step-Level Stitching with On-Demand Routing}
+\label{sec:hybrid}
+
+Block-level routing decides \emph{which model} generates a block, but it
+leaves the rejected blocks entirely to $\Target$.
+We make the two axes orthogonal: step-level stitching lets $\Drafter$
+absorb part of the target's denoising trajectory on rejected blocks,
+and an on-demand cascade removes most of the scoring cost that the
+router itself incurs.
+
+\textbf{Step-level stitching.}
+Under \texttt{SDVG}, rejection replays all $S$ target steps from the
+initial noise, discarding the partially denoised state that the scoring
+pass already computed.
+Dropping the replay, we hand the first $k$ steps of every rejected block
+to $\Drafter$ and let $\Target$ finish the trajectory:
+\begin{equation}
+  \hat{\mathbf{x}}^{(k)}_b
+  = \Drafter^{\,k}\!\left(\mathbf{z}_b\right),
+  \qquad
+  \mathbf{x}^*_b = \Target^{\,S-k}\!\left(\hat{\mathbf{x}}^{(k)}_b\right),
+  \label{eq:stitch}
+\end{equation}
+where $\Drafter^{\,k}$ denotes $k$ denoising steps of the drafter,
+$\Target^{\,S-k}$ the remaining target steps, and $\mathbf{z}_b$ the
+shared initial noise.
+The stitched steps add no computation---the draft forward passes were
+already paid for during scoring---and the target keeps its final
+low-timestep steps, where its refinement matters most.
+
+Two restrictions matter.
+Stitching applies \emph{only} to rejected blocks: an accepted block has
+committed drafter-generated frames to the cache, leaving no trajectory
+for the target to resume.
+More importantly, block 0 stays entirely target-generated even when it is
+rejected: it fixes the scene that every later block attends to, and its
+value lies in the target's final low-timestep refinement---exactly the
+steps that stitching removes.
+Stitching block 0 does cost $9.4$ points at roughly equal speed
+(Section~\ref{sec:ablation}), so we keep the anchor untouched and stitch
+only the blocks where rejection has already decided that the target's
+output is needed.
+
+\textbf{On-demand cascade routing.}
+Router decisions need not pay for all $F$ frames.
+\texttt{SDVG}-hybrid scores a subset of $F_{\mathrm{c}}{=}4$ evenly
+spaced frames to form a proxy $\hat{\score}_b$, and only falls back to
+the full $F$-frame score when that proxy is inconclusive:
+\begin{equation}
+  \hat{\score}_b \geq \threshold + \delta
+  \;\Rightarrow\; \text{accept},
+  \qquad
+  \hat{\score}_b \leq \threshold - \delta
+  \;\Rightarrow\; \text{reject},
+  \label{eq:cascade}
+\end{equation}
+with the full score computed only when
+$\hat{\score}_b \in (\threshold-\delta, \threshold+\delta)$ for some
+margin $\delta$.
+In our runs only $9.1\%$ of blocks land in that band at
+$\threshold{=}{-}1.0$, so most decisions cost $F_{\mathrm{c}}/F$ of a
+scoring pass; a scorer with a smaller fixed per-call overhead would widen
+this saving further.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Experiments}

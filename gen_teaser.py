@@ -1,4 +1,4 @@
-"""Generate teaser figure: 3 rows (Draft/RSVG/Target) x 2 columns (2 prompts), 4 frames per cell."""
+"""Generate teaser figure: 4 rows (Draft/SDVG/SDVG-hybrid/Target) x 2 columns (2 prompts), 4 frames per cell."""
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -10,14 +10,14 @@ figdir = '/rscratch/yuezhouhu/realtime-video.paper/figures/teaser_frames'
 outdir = '/rscratch/yuezhouhu/realtime-video.paper/figures'
 
 prompts = ['003', '000']  # Big Sur drone, Tokyo street
-methods = ['draft', 'rsvg', 'target']
-method_labels = ['Draft-only', 'RSVG (ours)', 'Target-only']
+methods = ['draft', 'rsvg', 'hybrid', 'target']
+method_labels = ['Draft-only', 'SDVG (ours)', 'SDVG-hybrid (ours)', 'Target-only']
 frames = [0, 8, 16, 24]
 
-nrows = len(methods)   # 3: draft, rsvg, target
+nrows = len(methods)   # 4: draft, rsvg, hybrid, target
 ncols = len(prompts)   # 2: two videos
 
-fig, axes = plt.subplots(nrows, ncols, figsize=(10, 4.5))
+fig, axes = plt.subplots(nrows, ncols, figsize=(10, 6.0))
 
 for i, method in enumerate(methods):
     for j, prompt_id in enumerate(prompts):
