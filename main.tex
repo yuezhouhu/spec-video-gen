@@ -272,15 +272,22 @@ replace the PRM with an image quality model as a block-level proxy.
   \centering
   \includegraphics[width=\linewidth]{figures/pipeline}
   \caption{%
-    \textbf{\texttt{SDVG} inference pipeline.}
-    For each video block, the 1.3B drafter generates a candidate in 4
-    denoising steps.
-    Block~0 is always force-rejected to anchor scene composition.
-    For blocks 1--8, the draft is VAE-decoded and scored by ImageReward
-    using min-frame aggregation ($q_b = \min_i \mathcal{R}(f_i, p)$).
+    \textbf{Inference pipeline.}
+    \emph{(a)} \texttt{SDVG}: for each video block, the 1.3B drafter
+    generates a candidate in 4 denoising steps.
+    The draft is VAE-decoded and scored by ImageReward with min-frame
+    aggregation ($q_b = \min_i \mathcal{R}(f_i, p)$).
     If $q_b \geq \tau$, the draft is accepted (blue) and committed to the
-    target KV cache; otherwise the 14B target regenerates the block
-    (orange).
+    target KV cache; otherwise the 14B target regenerates the block from
+    the same initial noise (orange).
+    Block~0 is always force-rejected to anchor scene composition.
+    \emph{(b)} \texttt{SDVG}-hybrid adds two mechanisms on the same flow.
+    The router first scores only $F_{\mathrm{c}}{=}4$ of the 12 decoded
+    frames, and runs the full-frame pass solely when the proxy falls
+    inside the grey band $(\tau{-}\delta, \tau{+}\delta)$.
+    On rejected blocks, the first $k$ denoising steps run in the drafter
+    and the target finishes from that trajectory state; block~0 is
+    excluded from stitching and stays entirely target-generated.
   }
   \label{fig:pipeline}
 \end{figure}
