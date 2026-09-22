@@ -214,7 +214,7 @@ This leaves \emph{speculative generation for autoregressive video} as an open pr
 
 In this work, we propose \textbf{Speculative Decoding for Autoregressive Video Generation} (\textbf{\texttt{SDVG}}), a training-free, plug-and-play framework that requires no architectural changes to either the drafter or target. Our main contributions are as follows:
 \begin{itemize}
-  \item \textbf{Pioneering Speculative Generation for Autoregressive Video}: We propose \texttt{SDVG}, the \textbf{first} training-free speculative generation framework for autoregressive video diffusion to the best of our knowledge. \texttt{SDVG} routes each block between a drafter and a target based on image quality routing, achieving a $1.59\times$ speedup with $98.1\%$ quality retention.
+  \item \textbf{Pioneering Speculative Generation for Autoregressive Video}: We propose \texttt{SDVG}, the \textbf{first} training-free speculative generation framework for autoregressive video diffusion to the best of our knowledge. \texttt{SDVG} routes each block between a drafter and a target based on image quality routing, achieving a $\mathbf{1.59\times}$ speedup with $98.1\%$ quality retention.
     We demonstrate that without any complex step-level trajectory engineering, a plain reward routing signal suffices to match large-model quality, establishing a new, simpler baseline for collaborative video generation.
   \item \textbf{Key Video-Specific Designs}: We identify three video-specific design choices critical to making
     reward-guided routing effective: a fixed
@@ -222,7 +222,7 @@ In this work, we propose \textbf{Speculative Decoding for Autoregressive Video G
     quality--speed knob, mandatory first-block regeneration to
     anchor scene composition, and worst-frame quality scoring to surface
     single-frame artifacts masked by block averages. 
-  \item \textbf{Pushing Acceleration Limits (\texttt{SDVG}-hybrid)}: We further push the limit of acceleration by proposing \texttt{SDVG}-hybrid, a combination with step-level stitching. \texttt{SDVG}-hybrid adopts more aggressive decoding strategies: the drafter absorbs the first $k$ steps of the target's trajectory on rejected blocks, and an on-demand cascade turns most router decisions into a four-frame lookup. When $k=3$, the combination reaches $1.96\times$ at $96.9\%$ quality retention and dominates the more aggressive thresholds of \texttt{SDVG} alone.
+  \item \textbf{Pushing Acceleration Limits (\texttt{SDVG}-hybrid)}: We further push the limit of acceleration by proposing \texttt{SDVG}-hybrid, a combination with step-level stitching. \texttt{SDVG}-hybrid adopts more aggressive decoding strategies: the drafter absorbs the first $k$ steps of the target's trajectory on rejected blocks, and an on-demand cascade turns most router decisions into a four-frame lookup. When $k=3$, the combination reaches $\mathbf{1.96\times}$ at $96.9\%$ quality retention and dominates the more aggressive thresholds of \texttt{SDVG} alone.
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
