@@ -168,7 +168,7 @@ paradigm for efficient, streaming video synthesis.
 Unlike conventional video diffusion models that generate all frames
 jointly \citep{videoworldsimulators2024,polyak2024movie}, autoregressive approaches
 produce video block by block, conditioning each new block on previously
-generated content through a shared key-value (KV) cache---mirroring the
+generated content through a shared key-value (KV) cache, which mirrors the
 autoregressive paradigm of large language models (LLMs).
 This design eliminates exposure bias and enables streaming generation:
 frames can be displayed as they are produced, rather than waiting for the
@@ -183,9 +183,8 @@ For example, frontier open-source 14B autoregressive video generation models (su
 require high-end GPUs (e.g. NVIDIA B200) to achieve real-time throughput.
 Meanwhile, compact 1B-scale video models, such as
  \citet{wan2025wanopenadvancedlargescale}, run at less than one-quarter of the
-computational cost but produce lower but
-still reasonable quality.
-Thus, the central question is then:
+computational cost but produce lower but still reasonable quality.
+Thus, the central question is:
 
 \begin{center}
 \emph{Can we capture the speed of small
@@ -196,28 +195,14 @@ Speculative decoding for LLMs \citep{leviathan2023fastinferencetransformersspecu
 offers a compelling blueprint: a small draft model proposes candidate
 outputs, and the large target model is invoked only when necessary.
 The block-by-block structure of autoregressive video generation is
-especially well-suited to this paradigm---each generated block is a
+especially well-suited to this paradigm, as each generated block is a
 self-contained unit that can be evaluated before being committed to the
 KV cache, making per-block routing a natural design choice.
 
-Making large and small models cooperate effectively is, however,
-non-trivial.
-Recent work has explored related ideas.
-T-Stitch \citep{pan2024tstitchacceleratingsamplingpretrained},
-SRDiffusion \citep{cheng2025srdiffusionacceleratevideodiffusion}, and
-HybridStitch \citep{sun2026hybridstitch}
-all propose splitting the denoising trajectory between models at the
-noise-step level: the small model handles certain steps and the large
-model handles others.
-MoDM \citep{xia2025modmefficientservingimage} routes entire generation requests between models
-at the serving system level based on a caching mechanism.
-While effective in their respective settings, these approaches were not
-designed for autoregressive video generation and carry meaningful
-limitations.
-T-Stitch, SRDiffusion, and HybridStitch use fixed step splits without detecting or
-correcting poor drafts, while MoDM relies on cache hits and lacks per-block
-quality guarantees. All four require extra trajectory or system-level
-engineering, increasing deployment complexity.
+However, Making large and small models cooperate effectively is non-trivial.
+Recent work has explored related ideas. T-Stitch \citep{pan2024tstitchacceleratingsamplingpretrained},
+SRDiffusion \citep{cheng2025srdiffusionacceleratevideodiffusion}, and HybridStitch \citep{sun2026hybridstitch} all propose splitting the denoising trajectory between models at the noise-step level: the small model handles certain steps and the large model handles others. MoDM \citep{xia2025modmefficientservingimage} routes entire generation requests between models at the serving system level based on a caching mechanism. While effective in their respective settings, these approaches were not designed specifically for autoregressive video generation: T-Stitch, SRDiffusion, and HybridStitch all split the generation on the time step dimension rather than the block dimension, while MoDM relies on cache hits and lacks per-block
+quality guarantees. This makes their performance suboptimal on an autoregressive generation scenario.
 
 A further challenge distinguishes video from LLMs: classical speculative
 decoding accepts or rejects drafts via exact token-probability comparisons
@@ -227,24 +212,10 @@ no associated logit distribution, making token-level verification
 inapplicable.
 This leaves \emph{speculative generation for autoregressive video} as an open problem.
 
-In this work, we propose \textbf{Speculative Decoding for Autoregressive Video
-Generation} (\textbf{\texttt{SDVG}}), a training-free, plug-and-play framework
-that requires no architectural changes to either the drafter or target.
-For each video block, the drafter generates a candidate; an
-image quality router then decides, per
-block, whether to accept the draft or invoke the target for
-regeneration.
-Our key insight is that a plain image-quality signal, applied
-block-by-block with a fixed threshold, is sufficient to match
-target-only quality without any step-level trajectory engineering---simplicity
-is a feature, not a limitation.
-On 1003 MovieGenVideoBench prompts at $832{\times}480$ resolution, \texttt{SDVG}
-achieves $98.1\%$ of target-only VisionReward quality ($0.0773$
-vs.\ $0.0788$) at a $\mathbf{1.59\times}$ speedup.
-Importantly, \texttt{SDVG} is \emph{orthogonal} to step-level methods such as
-T-Stitch or SRDiffusion, which can be directly applied to the target
-model's generation steps within \texttt{SDVG}, providing a composable path to
-further speedup.
+In this work, we propose \textbf{Speculative Decoding for Autoregressive Video Generation} (\textbf{\texttt{SDVG}}), a training-free, plug-and-play framework that requires no architectural changes to either the drafter or target. For each video block, the drafter generates a candidate; an image quality router then decides, per block, whether to accept the draft or invoke the target for
+regeneration. On 1003 MovieGenVideoBench prompts at $832{\times}480$ resolution, \texttt{SDVG}
+achieves $98.1\%$ of target-only VisionReward quality ($0.0773$ vs.\ $0.0788$) at a $\mathbf{1.59\times}$ speedup. Importantly, \texttt{SDVG} is \emph{orthogonal} to step-level methods such as T-Stitch or SRDiffusion, which can be directly applied to the target model's generation steps within \texttt{SDVG}.
+% Here add some hybrid mode results
 Our main contributions are as follows:
 \begin{itemize}
   \item We propose \texttt{SDVG}, a training-free speculative generation framework
@@ -261,6 +232,7 @@ Our main contributions are as follows:
     step-level trajectory engineering, a plain reward routing signal
     suffices to match large-model quality---establishing a new,
     simpler baseline for collaborative video generation.
+  \item We further combine XXX % Add some hybrid results
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
