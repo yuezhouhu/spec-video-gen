@@ -1,49 +1,39 @@
-"""Generate the SDVG pipeline figure as a clean SVG (two-row layout).
+"""Generate the SDVG pipeline figure as a clean SVG.
 
 Usage:  python3 gen_pipeline_svg.py
 Writes: figures/pipeline.svg  (+ figures/pipeline.pdf / .png via cairosvg)
 
-Two stacked rows share one legend:
-  (a) SDVG          -- block-level routing: drafter proposes, the reward
-                       router accepts or sends the block to the target.
-  (b) SDVG-hybrid   -- the same flow plus step-level stitching on the
-                       reject path and on-demand cascade scoring.
+One pipeline covers both methods. The base SDVG flow is drawn once; the
+two SDVG-hybrid mechanisms appear as deltas on that same flow:
 
-Redrawn in a flat, vector style: light fills, dark strokes, no gradients
-or drop shadows. Type is sized for print: the canvas is included at
-\\linewidth (~14 cm), so a 20 px label renders at ~7 pt.
+  * cascade scoring    -- green dashed callout in the router panel
+  * step-level stitch  -- blue segment on the reject path + legend entry
+
+Flat vector style: light fills, dark strokes, no gradients or shadows.
+Type is sized for print: the canvas is included at \\linewidth (~14 cm),
+so a 22 px label renders at ~6.5 pt.
 """
 import os
-
-# PyCharm's remote-dev server points FONTCONFIG_PATH at its own tiny font
-# directory, which hides system fonts (text then falls back to Fira Code).
 os.environ.pop("FONTCONFIG_PATH", None)
 
 FONT = "DejaVu Sans, Helvetica, Arial, sans-serif"
-
-# palette
-BLUE_F, BLUE_S = "#cfe0f3", "#3c78b4"      # drafter / draft
-ORG_F, ORG_S = "#e8964f", "#a85a20"        # target / regenerated
-GRN = "#3f8f56"                            # accept
-RED = "#bf3b2b"                            # reject
+BLUE_F, BLUE_S = "#cfe0f3", "#3c78b4"
+ORG_F, ORG_S = "#e8964f", "#a85a20"
+GRN, RED = "#3f8f56", "#bf3b2b"
 PANEL = "#f1f1ef"
-NOTE_F, NOTE_S = "#fdf6d8", "#c9a227"      # callout notes
-CASC_F, CASC_S = "#e8f1e8", "#3f8f56"      # cascade note
-STCH_F, STCH_S = "#fdeee6", "#bf5b2b"      # stitching region
-INK = "#1c1c1c"
-GREY = "#4f4f4f"
-
-# type scale (px on the 1408-px-wide canvas)
-T_TITLE, T_BOX = 24, 20                    # panel title / box title
-T_SUB, T_BODY = 17, 16                     # box subtitle / body labels
-T_SMALL, T_FORM = 13, 17                   # fine print / score formula
+NOTE_F, NOTE_S = "#fdf6d8", "#c9a227"
+CASC_F, CASC_S = "#e8f1e8", "#3f8f56"
+INK, GREY = "#1c1c1c", "#4f4f4f"
+T_HEAD, T_TITLE, T_BOX = 26, 32, 34
+T_SUB, T_BODY = 25, 22
+T_SMALL, T_FORM = 19, 26
 
 parts = []
 add = parts.append
 
 
 def esc(s):
-    return (s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def box(x, y, w, h, fill, stroke, rx=8, sw=1.6, dash=False):
@@ -53,11 +43,10 @@ def box(x, y, w, h, fill, stroke, rx=8, sw=1.6, dash=False):
 
 
 def text(x, y, s, size=T_BODY, weight="normal", fill=INK, anchor="middle",
-         style="normal", spacing=None):
-    sp = f' letter-spacing="{spacing}"' if spacing else ""
+         style="normal"):
     add(f'<text x="{x}" y="{y}" font-family="{FONT}" font-size="{size}" '
         f'font-weight="{weight}" font-style="{style}" fill="{fill}" '
-        f'text-anchor="{anchor}"{sp}>{esc(s)}</text>')
+        f'text-anchor="{anchor}">{esc(s)}</text>')
 
 
 _FONT_FILES = {
@@ -65,62 +54,47 @@ _FONT_FILES = {
     ("normal", "italic"): "/usr/share/fonts/truetype/dejavu/DejaVuSans-Oblique.ttf",
     ("bold", "normal"): "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
 }
-_font_cache = {}
+_cache = {}
 
 
 def _measure(s, weight, style, size):
     from PIL import ImageFont
-    key = (weight, style, size)
-    if key not in _font_cache:
-        path = _FONT_FILES.get((weight, style), _FONT_FILES[("normal", "normal")])
-        _font_cache[key] = ImageFont.truetype(path, int(round(size)))
-    return _font_cache[key].getlength(s)
+    k = (weight, style, size)
+    if k not in _cache:
+        _cache[k] = ImageFont.truetype(_FONT_FILES.get(k[:2], _FONT_FILES[("normal", "normal")]), int(size))
+    return _cache[k].getlength(s)
 
 
-def rich(x_center, y, spans, size=T_BODY, weight="normal", fill=INK):
-    """spans: list of (text, dy, sub-size or None, italic or None).
-
-    cairosvg mis-lays-out `text-anchor="middle"` with tspans (each span is
-    re-centered independently), so we center manually: measure the run
-    with PIL and emit a start-anchored text. `dy` is cumulative in SVG --
-    every span carries an explicit dy, and a subscript (dy=+5) must be
-    followed by dy=-5 to restore the baseline.
-    """
+def rich(xc, y, spans, size=T_BODY, weight="normal", fill=INK):
     total = sum(_measure(t, weight, "italic" if it else "normal", sz or size)
                 for t, _, sz, it in spans)
     out = []
     for t, dy, sz, it in spans:
-        attrs = f'dy="{dy}"' if dy else ""
+        a = f'dy="{dy}"' if dy else ""
         if sz:
-            attrs += f' font-size="{sz}"'
+            a += f' font-size="{sz}"'
         if it:
-            attrs += ' font-style="italic"'
-        out.append(f"<tspan {attrs}>{esc(t)}</tspan>")
-    x0 = x_center - total / 2.0
-    add(f'<text x="{x0:.1f}" y="{y}" font-family="{FONT}" font-size="{size}" '
-        f'font-weight="{weight}" fill="{fill}" text-anchor="start">'
-        + "".join(out) + "</text>")
+            a += ' font-style="italic"'
+        out.append(f"<tspan {a}>{esc(t)}</tspan>")
+    add(f'<text x="{xc - total / 2:.1f}" y="{y}" font-family="{FONT}" '
+        f'font-size="{size}" font-weight="{weight}" fill="{fill}" '
+        f'text-anchor="start">' + "".join(out) + "</text>")
 
 
-def arrow(x1, y1, x2, y2, color=INK, sw=2.0, dashed=False, marker="arrow"):
+def arrow(x1, y1, x2, y2, color=INK, sw=2.6, dashed=False, marker="arrow"):
     d = ' stroke-dasharray="6,4"' if dashed else ""
     add(f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" stroke="{color}" '
         f'stroke-width="{sw}"{d} marker-end="url(#{marker})"/>')
 
 
-def path_arrow(d, color=INK, sw=2.0, dashed=False, marker="arrow"):
+def path_arrow(d, color=INK, sw=2.6, dashed=False, marker="arrow"):
     dd = ' stroke-dasharray="6,4"' if dashed else ""
     add(f'<path d="{d}" fill="none" stroke="{color}" stroke-width="{sw}"'
         f'{dd} marker-end="url(#{marker})"/>')
 
 
-W = 1408
-H = 812
-ROW_H = 318                                  # panel height per row
-ROW_TOP = (48, 400)                          # top y of row (a) and row (b)
-
-add(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" '
-    f'width="{W}" height="{H}">')
+W, H = 1408, 772
+add(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}">')
 add('<defs>')
 for name, col in [("arrow", INK), ("arrowblue", BLUE_S), ("arroworg", ORG_S),
                   ("arrowgrn", GRN), ("arrowred", RED)]:
@@ -129,266 +103,167 @@ for name, col in [("arrow", INK), ("arrowblue", BLUE_S), ("arroworg", ORG_S),
         f'<path d="M 0 1 L 9 5 L 0 9 z" fill="{col}"/></marker>')
 add('</defs>')
 add(f'<rect x="0" y="0" width="{W}" height="{H}" fill="white"/>')
+add('<g transform="translate(0,-40)">')
 
-# horizontal panel bounds, shared by both rows
 PANELS = [
     (24, 214, "Input"),
-    (246, 520, "Drafter"),
-    (552, 812, "VAE +\nReward Router"),
-    (844, 1084, "Target\n(reject path)"),
-    (1116, 1384, "Output"),
+    (228, 520, "Drafter"),
+    (534, 818, "VAE +\nReward Router"),
+    (832, 1076, "Target\n(reject path)"),
+    (1090, 1384, "Output"),
 ]
+PT, PB = 74, 700
+for x0, x1, title in PANELS:
+    box(x0, PT, x1 - x0, PB - PT, PANEL, PANEL, rx=16, sw=0)
+    cx = (x0 + x1) / 2
+    for i, ln in enumerate(title.split("\n")):
+        text(cx, 110 + i * 42, ln, size=T_TITLE, weight="bold")
 
+# ── input ───────────────────────────────────────────────────────────────────
+text(119, 232, "Block", size=T_BODY, fill=GREY)
+rich(119, 260, [("b", 0, None, 1), (" = 0, 1, …, 8", 0, None, 1)], size=T_BODY, fill=GREY)
+box(36, 470, 168, 118, "#ffffff", "#9a9a9a", rx=8, sw=1.6)
+text(120, 506, "Text", size=24, weight="bold")
+text(120, 536, "Prompt", size=24, weight="bold")
+text(120, 566, "p", size=24, style="italic")
 
-def row(y0, mode, label):
-    """Draw one pipeline row. mode: 'base' | 'hybrid'."""
-    hybrid = mode == "hybrid"
+# ── drafter ─────────────────────────────────────────────────────────────────
+DBX, DBW = 250, 172
+box(DBX, 240, DBW, 232, BLUE_F, BLUE_S, rx=12, sw=2.2)
+text(DBX + DBW / 2, 288, "Drafter", size=T_BOX, weight="bold", fill="#1d4e7d")
+rich(DBX + DBW / 2, 326, [("D", 0, None, 1), ("  (1.3B)", 0, None, 1)], size=T_SUB, fill="#1d4e7d")
+nx, ny = DBX + DBW / 2, 382
+nodes = [(nx - 44, ny - 16), (nx - 44, ny + 16), (nx - 9, ny - 28),
+         (nx - 9, ny), (nx - 9, ny + 28), (nx + 32, ny - 16), (nx + 32, ny + 16)]
+for a, b in [(0, 2), (0, 3), (0, 4), (1, 2), (1, 3), (1, 4), (2, 5), (2, 6), (3, 5), (3, 6), (4, 5), (4, 6)]:
+    add(f'<line x1="{nodes[a][0]}" y1="{nodes[a][1]}" x2="{nodes[b][0]}" y2="{nodes[b][1]}" stroke="#7fa8cf" stroke-width="1.8"/>')
+for x, y in nodes:
+    add(f'<circle cx="{x}" cy="{y}" r="7" fill="#ffffff" stroke="{BLUE_S}" stroke-width="2"/>')
+text(nx, 442, "4 denoising", size=T_SMALL + 1, fill="#1d4e7d")
+text(nx, 466, "steps", size=T_SMALL + 1, fill="#1d4e7d")
 
-    # ── panel backgrounds + titles ──────────────────────────────────────────
-    for x0, x1, title in PANELS:
-        box(x0, y0, x1 - x0, ROW_H, PANEL, PANEL, rx=14, sw=0)
-        cx = (x0 + x1) / 2
-        for i, ln in enumerate(title.split("\n")):
-            text(cx, y0 + 34 + i * 30, ln, size=T_TITLE, weight="bold")
+arrow(206, 528, 244, 528, color=BLUE_S, marker="arrowblue")
+text(233, 486, "noise", size=T_SMALL, fill=GREY)
+rich(233, 508, [("z", 0, None, 1), ("b", 5, 14, 1)], size=T_SMALL, fill=GREY)
 
-    # row tag in the left margin
-    tag_y = y0 + ROW_H - 6
-    text(18, tag_y, f"({label})", size=T_TITLE, weight="bold", anchor="start")
+path_arrow("M 424 300 L 512 300 L 512 232 L 546 232", color=BLUE_S, marker="arrowblue")
+text(470, 338, "draft block", size=T_SMALL, fill=GREY)
+rich(470, 362, [("x̂", 0, None, 1), ("b", 5, 14, 1)], size=T_BODY, fill=GREY)
 
-    # ── Input ───────────────────────────────────────────────────────────────
-    text(119, y0 + 96, "Block", size=T_SMALL + 1, fill=GREY)
-    rich(119, y0 + 118, [("b", 0, None, 1), (" = 0, 1, …, 8", 0, None, 1)],
-         size=T_SMALL + 1, fill=GREY)
-    box(46, y0 + 168, 146, 76, "#ffffff", "#9a9a9a", rx=8, sw=1.6)
-    text(119, y0 + 196, "Text", size=T_SUB, weight="bold")
-    text(119, y0 + 218, "Prompt", size=T_SUB, weight="bold")
-    rich(119, y0 + 238, [("p", 0, None, 1)], size=T_SUB)
+for i in range(8):
+    shade = "#7fb0dd" if i == 0 else "#bcd6ee"
+    add(f'<rect x="{DBX + 6 + i * 20}" y="512" width="18" height="26" rx="3" fill="{shade}" stroke="{BLUE_S}" stroke-width="1.6"/>')
+text(nx, 578, "KV Cache", size=T_BODY, fill=GREY)
+text(nx, 604, "(Drafter)", size=T_BODY, fill=GREY)
 
-    # ── Drafter ─────────────────────────────────────────────────────────────
-    DBX, DBW = 268, 148
-    dbx = DBX + DBW / 2
-    box(DBX, y0 + 66, DBW, 158, BLUE_F, BLUE_S, rx=10, sw=2.0)
-    text(dbx, y0 + 94, "Drafter", size=T_BOX, weight="bold", fill="#1d4e7d")
-    rich(dbx, y0 + 116, [("D", 0, None, 1), ("  (1.3B)", 0, None, 1)],
-         size=T_SMALL + 1, fill="#1d4e7d")
-    nx, ny = dbx, y0 + 152
-    nodes = [(nx - 32, ny - 12), (nx - 32, ny + 12), (nx - 7, ny - 21),
-             (nx - 7, ny), (nx - 7, ny + 21), (nx + 24, ny - 12), (nx + 24, ny + 12)]
-    edges = [(0, 2), (0, 3), (0, 4), (1, 2), (1, 3), (1, 4), (2, 5), (2, 6),
-             (3, 5), (3, 6), (4, 5), (4, 6)]
-    for a, b in edges:
-        add(f'<line x1="{nodes[a][0]}" y1="{nodes[a][1]}" x2="{nodes[b][0]}" '
-            f'y2="{nodes[b][1]}" stroke="#7fa8cf" stroke-width="1.5"/>')
-    for x, y in nodes:
-        add(f'<circle cx="{x}" cy="{y}" r="5.2" fill="#ffffff" '
-            f'stroke="{BLUE_S}" stroke-width="1.7"/>')
-    text(dbx, y0 + 196, "4 denoising", size=T_SMALL, fill="#1d4e7d")
-    text(dbx, y0 + 214, "steps", size=T_SMALL, fill="#1d4e7d")
+# ── VAE + router panel ──────────────────────────────────────────────────────
+cx0 = 588
+add(f'<ellipse cx="{cx0}" cy="205" rx="40" ry="12" fill="#f4c79b" stroke="{ORG_S}" stroke-width="1.8"/>')
+add(f'<rect x="{cx0 - 40}" y="205" width="80" height="46" fill="#f0b57f" stroke="none"/>')
+add(f'<line x1="{cx0 - 40}" y1="205" x2="{cx0 - 40}" y2="251" stroke="{ORG_S}" stroke-width="1.8"/>')
+add(f'<line x1="{cx0 + 40}" y1="205" x2="{cx0 + 40}" y2="251" stroke="{ORG_S}" stroke-width="1.8"/>')
+add(f'<ellipse cx="{cx0}" cy="251" rx="40" ry="12" fill="#e79a4f" stroke="{ORG_S}" stroke-width="1.8"/>')
+text(cx0, 236, "VAE", size=T_BODY, weight="bold", fill="#6b3c12")
+text(cx0, 282, "Decode", size=T_BODY, weight="bold", fill="#6b3c12")
 
-    # noise arrow: prompt -> drafter
-    arrow(192, y0 + 238, 258, y0 + 238, color=BLUE_S, marker="arrowblue")
-    text(222, y0 + 216, "noise", size=T_SMALL, fill=GREY)
-    rich(222, y0 + 236, [("z", 0, None, 1), ("b", 4, 11, 1)], size=T_SMALL, fill=GREY)
+# frame strips: solid = scored by default, dashed = cascade proxy (hybrid)
+text(690, 186, "F = 12 frames", size=T_SMALL, fill=GREY)
+for i in range(3):
+    x = 660 + i * 34
+    add(f'<rect x="{x}" y="200" width="30" height="48" rx="2" fill="#e4e4e4" stroke="#4a4a4a" stroke-width="1.8"/>')
+    add(f'<rect x="{x + 4}" y="208" width="22" height="32" fill="#9aa7b5"/>')
+rich(730, 276, [("f", 0, None, 1), ("1", 5, 14, 1), (", f", 0, None, 1), ("2", 5, 14, 1),
+                (", …, f", 0, None, 1), ("12", 5, 14, 1)], size=T_BODY, fill=GREY)
+arrow(630, 232, 654, 232, color=INK, sw=2.2)
 
-    # draft block arrow: drafter -> VAE
-    path_arrow(f"M 416 {y0 + 110} L 500 {y0 + 110} L 500 {y0 + 96} L 536 {y0 + 96}",
-               color=BLUE_S, marker="arrowblue")
-    text(470, y0 + 138, "draft block", size=T_SMALL, fill=GREY)
-    rich(470, y0 + 158, [("x̂", 0, None, 1), ("b", 4, 11, 1)], size=T_BODY, fill=GREY)
+path_arrow("M 710 254 L 710 350", color=INK, sw=2.2)
+add('<circle cx="710" cy="388" r="30" fill="#c0392b" stroke="#8f2a20" stroke-width="1.8"/>')
+add('<path d="M 698 416 L 684 454 L 710 439 L 736 454 L 722 416 Z" fill="#c0392b" stroke="#8f2a20" stroke-width="1.4"/>')
+add('<path d="M 710 370 l 6.5 13 14.5 2.4 -10.5 10 2.5 14.4 -13 -6.8 -13 6.8 2.5 -14.4 -10.5 -10 14.5 -2.4 z" fill="#ffffff"/>')
+text(668, 382, "ImageReward", size=T_BODY, weight="bold", fill="#8f2a20", anchor="end")
+rich(668, 408, [("R", 0, None, 1)], size=T_BODY, fill="#8f2a20")
 
-    # drafter KV cache
-    for i in range(8):
-        shade = "#7fb0dd" if i == 0 else "#bcd6ee"
-        add(f'<rect x="{DBX + 6 + i * 17}" y="{y0 + 258}" width="15" height="22" '
-            f'rx="3" fill="{shade}" stroke="{BLUE_S}" stroke-width="1.4"/>')
-    text(dbx, y0 + 298, "KV Cache (Drafter)", size=T_SMALL, fill=GREY)
+rich(690, 512, [("q", 0, None, 1), ("b", 5, 15, 1), (" = min", -5, None, 1),
+                ("i", 5, 15, 1), (" R(f", -5, None, 1), ("i", 5, 15, 1),
+                (", p)", -5, None, 1)], size=T_FORM)
+path_arrow("M 742 388 L 776 388 L 776 330 L 800 330", color=INK)
 
-    # ── VAE decode ──────────────────────────────────────────────────────────
-    vx, vy = 596, y0 + 88
-    add(f'<ellipse cx="{vx}" cy="{vy}" rx="25" ry="8" fill="#f4c79b" '
-        f'stroke="{ORG_S}" stroke-width="1.7"/>')
-    add(f'<rect x="{vx - 25}" y="{vy}" width="50" height="28" fill="#f0b57f" '
-        f'stroke="none"/>')
-    add(f'<line x1="{vx - 25}" y1="{vy}" x2="{vx - 25}" y2="{vy + 28}" '
-        f'stroke="{ORG_S}" stroke-width="1.7"/>')
-    add(f'<line x1="{vx + 25}" y1="{vy}" x2="{vx + 25}" y2="{vy + 28}" '
-        f'stroke="{ORG_S}" stroke-width="1.7"/>')
-    add(f'<ellipse cx="{vx}" cy="{vy + 28}" rx="25" ry="8" fill="#e79a4f" '
-        f'stroke="{ORG_S}" stroke-width="1.7"/>')
-    text(vx, y0 + 108, "VAE", size=T_SMALL, weight="bold", fill="#6b3c12")
-    text(vx, y0 + 146, "Decode", size=T_SMALL, weight="bold", fill="#6b3c12")
+# block-0 note
+box(542, 556, 130, 72, NOTE_F, NOTE_S, rx=10, sw=1.8, dash=True)
+text(607, 582, "Block 0:", size=T_SMALL - 2, weight="bold", fill="#7a5c00")
+text(607, 601, "force-reject", size=T_SMALL - 2, weight="bold", fill="#7a5c00")
+text(607, 620, "(scene anchor)", size=T_SMALL - 2, weight="bold", fill="#7a5c00")
 
-    # ── frame strip: scored frames (4 across the cascade, else 3) ───────────
-    fw = 4 if hybrid else 3
-    fx0 = 646                                    # left edge of the strip
-    for i in range(fw):
-        x = fx0 + i * 25
-        add(f'<rect x="{x}" y="{y0 + 76}" width="22" height="38" rx="2" '
-            f'fill="#e4e4e4" stroke="#4a4a4a" stroke-width="1.6"/>')
-        add(f'<rect x="{x + 3}" y="{y0 + 82}" width="16" height="26" '
-            f'fill="#9aa7b5"/>')
-    strip_cx = fx0 + (fw - 1) * 25 / 2 + 11
-    arrow(626, y0 + 96, fx0 - 4, y0 + 96, color=INK, sw=1.8)
-    if not hybrid:
-        text(strip_cx, y0 + 132, "F = 3 frames", size=T_SMALL, fill=GREY)
+# ── router diamond ──────────────────────────────────────────────────────────
+add('<polygon points="866,282 928,340 866,398 804,340" fill="#ffffff" stroke="#8a8a8a" stroke-width="2"/>')
+rich(866, 348, [("q", 0, None, 1), ("b", 5, 15, 1), (" ≥ τ", -5, None, 1)], size=T_BODY)
 
-    # ── ImageReward badge, fed by the scored frames ─────────────────────────
-    path_arrow(f"M {strip_cx} {y0 + 142} L {strip_cx} {y0 + 164}", color=INK,
-               sw=1.8)
-    bx, by = 698, y0 + 190
-    add(f'<circle cx="{bx}" cy="{by}" r="24" fill="#c0392b" '
-        f'stroke="#8f2a20" stroke-width="1.7"/>')
-    add(f'<path d="M {bx - 12} {by + 24} L {bx - 22} {by + 50} L {bx} {by + 38} '
-        f'L {bx + 22} {by + 50} L {bx + 12} {by + 24} Z" fill="#c0392b" '
-        f'stroke="#8f2a20" stroke-width="1.3"/>')
-    add(f'<path d="M {bx} {by - 15} l 5 10.5 11.5 1.9 -8.3 8 2 11.5 '
-        f'-10.2 -5.4 -10.2 5.4 2 -11.5 -8.3 -8 11.5 -1.9 z" fill="#ffffff"/>')
-    text(bx, y0 + 258, "ImageReward", size=T_SMALL - 1, weight="bold",
-         fill="#8f2a20")
+# accept
+path_arrow("M 928 340 L 1084 340", color=GRN, sw=4, marker="arrowgrn")
+text(985, 312, "Accept", size=T_BODY, weight="bold", fill=GRN)
+add(f'<path d="M 1012 318 l 11 15 22 -30" fill="none" stroke="{GRN}" stroke-width="4.5"/>')
 
-    if hybrid:
-        # dashed strip = the full-frame pass, reached only inside the band
-        for i in range(3):
-            x = 568 + i * 22
-            add(f'<rect x="{x}" y="{y0 + 196}" width="20" height="32" rx="2" '
-                f'fill="#e4e4e4" stroke="#4a4a4a" stroke-width="1.6" '
-                f'stroke-dasharray="4,3"/>')
-            add(f'<rect x="{x + 3}" y="{y0 + 201}" width="14" height="22" '
-                f'fill="#9aa7b5"/>')
-        path_arrow(f"M 620 {y0 + 230} L 640 {y0 + 214}", color=GREY, sw=1.6,
-                   dashed=True)
-        # band note across the bottom of the panel
-        box(556, y0 + 268, 250, 42, CASC_F, CASC_S, rx=8, sw=1.5, dash=True)
-        text(681, y0 + 287, "Decide from the 4-frame proxy", size=T_SMALL,
-             weight="bold", fill="#2f6b40")
-        text(681, y0 + 303, "unless τ−δ < q̂b < τ+δ", size=T_SMALL, fill="#2f6b40")
-        score_y = y0 + 266
-    else:
-        rich(700, y0 + 292, [("q", 0, None, 1), ("b", 4, 11, 1),
-                             (" = min", -4, None, 1), ("i", 4, 11, 1),
-                             (" R(f", -4, None, 1), ("i", 4, 11, 1),
-                             (", p)", -4, None, 1)], size=T_SMALL)
-        score_y = y0 + 296
+# ── reject path: step-level stitching (hybrid) ──────────────────────────────
+# orange = target steps, blue = the steps the drafter absorbs in SDVG-hybrid
+path_arrow("M 866 398 L 866 418", color=ORG_S, sw=4)
+add(f'<line x1="866" y1="418" x2="866" y2="466" stroke="{BLUE_S}" stroke-width="4"/>')
+path_arrow("M 866 466 L 866 478", color=BLUE_S, sw=4, marker="arrowblue")
+text(898, 416, "Reject", size=T_BODY, weight="bold", fill=RED, anchor="start")
+add(f'<path d="M 1042 404 l 26 26 M 1068 404 l -26 26" stroke="{RED}" stroke-width="4.5"/>')
 
-    # ── router diamond ──────────────────────────────────────────────────────
-    rx, ry = 952, y0 + 140
-    add(f'<polygon points="{rx},{ry - 46} {rx + 52},{ry} {rx},{ry + 46} '
-        f'{rx - 52},{ry}" fill="#ffffff" stroke="#8a8a8a" stroke-width="1.8"/>')
-    if hybrid:
-        rich(rx, ry - 4, [("q̂", 0, None, 1), ("b", 4, 12, 1),
-                          (" ≥ τ", -4, None, 1)], size=T_SMALL + 1)
-        rich(rx, ry + 16, [("| q", 0, None, 1), ("b", 4, 12, 1),
-                           (" ≥ τ", -4, None, 1)], size=T_SMALL + 1)
-    else:
-        rich(rx, ry + 4, [("q", 0, None, 1), ("b", 4, 12, 1),
-                          (" ≥ τ", -4, None, 1)], size=T_BODY)
+# stitching callout on the reject path
+box(962, 428, 46, 28, BLUE_F, BLUE_S, rx=6, sw=1.6)
+text(985, 448, "k", size=T_BODY, weight="bold", fill="#1d4e7d")
+path_arrow("M 962 464 L 876 464", color=BLUE_S, sw=2.0, marker="arrowblue")
 
-    # ── router diamond ──────────────────────────────────────────────────────
-    rx, ry = 952, y0 + 140
-    add(f'<polygon points="{rx},{ry - 46} {rx + 52},{ry} {rx},{ry + 46} '
-        f'{rx - 52},{ry}" fill="#ffffff" stroke="#8a8a8a" stroke-width="1.8"/>')
-    if hybrid:
-        rich(rx, ry - 4, [("q̂", 0, None, 1), ("b", 4, 12, 1),
-                          (" ≥ τ", -4, None, 1)], size=T_SMALL + 1)
-        rich(rx, ry + 16, [("| q", 0, None, 1), ("b", 4, 12, 1),
-                           (" ≥ τ", -4, None, 1)], size=T_SMALL + 1)
-    else:
-        rich(rx, ry + 4, [("q", 0, None, 1), ("b", 4, 12, 1),
-                          (" ≥ τ", -4, None, 1)], size=T_BODY)
+# target box
+box(852, 478, 154, 148, ORG_F, ORG_S, rx=12, sw=2.2)
+text(929, 518, "Target", size=T_BOX, weight="bold", fill="#ffffff")
+rich(929, 552, [("T", 0, None, 1), ("  (14B)", 0, None, 1)], size=T_SUB, fill="#ffffff")
+for dy in (0, 13, 26):
+    add(f'<path d="M 901 {576 + dy} L 929 {565 + dy} L 957 {576 + dy} L 929 {587 + dy} Z" fill="#ffffff" stroke="{ORG_S}" stroke-width="1.4"/>')
+text(929, 616, "steps k…3 in T", size=T_SMALL - 2, fill="#ffffff")
 
-    # score -> diamond: travel in the gap between the two panels so the
-    # line clears the target box (which sits below the diamond)
-    path_arrow(f"M 780 {score_y} L 838 {score_y} L 838 {ry - 16} "
-               f"L {rx - 48} {ry - 16}", color=INK, sw=1.8)
+path_arrow("M 1006 548 L 1112 548", color=ORG_S, marker="arroworg")
+text(1060, 512, "Regenerated", size=T_SMALL, fill=GREY)
+rich(1060, 534, [("block ", 0, None, 0), ("x*", 0, None, 1), ("b", 5, 14, 1)], size=T_SMALL, fill=GREY)
 
-    # yes -> accept
-    path_arrow(f"M {rx + 54} {ry} L 1108 {ry}", color=GRN, sw=3.2,
-               marker="arrowgrn")
-    text(1022, ry - 22, "Accept", size=T_SMALL + 1, weight="bold", fill=GRN)
-    add(f'<path d="M 1052 {ry - 16} l 9 12 18 -24" fill="none" stroke="{GRN}" '
-        f'stroke-width="3.6"/>')
+# ── cascade callout (hybrid) ────────────────────────────────────────────────
+box(684, 556, 130, 72, CASC_F, CASC_S, rx=10, sw=1.8, dash=True)
+text(749, 580, "Cascade", size=T_SMALL - 2, weight="bold", fill="#2f6b40")
+text(749, 599, "4 of 12", size=T_SMALL - 2, fill="#2f6b40")
+text(749, 618, "frames first", size=T_SMALL - 2, fill="#2f6b40")
 
-    # no -> target
-    path_arrow(f"M {rx} {ry + 46} L {rx} {y0 + 232}", color=RED, sw=3.2,
-               marker="arrowred")
-    text(958, y0 + 210, "Reject", size=T_SMALL + 1, weight="bold", fill=RED,
-         anchor="start")
-    add(f'<path d="M 1030 {y0 + 196} l 20 20 M 1050 {y0 + 196} l -20 20" '
-        f'stroke="{RED}" stroke-width="3.6"/>')
+# ── output ──────────────────────────────────────────────────────────────────
+text(1237, 200, "KV Cache (Target)", size=T_BODY, weight="bold")
+add('<rect x="1112" y="232" width="38" height="34" rx="5" fill="#4a4a4a"/>')
+add('<path d="M 1120 232 v -9 a 11 11 0 0 1 22 0 v 9" fill="none" stroke="#4a4a4a" stroke-width="4.5"/>')
+add('<circle cx="1131" cy="245" r="4.5" fill="#ffffff"/>')
+for i in range(4):
+    add(f'<rect x="{1160 + i * 30}" y="230" width="28" height="36" rx="3" fill="{"#7fb0dd" if i % 2 == 0 else "#bcd6ee"}" stroke="{BLUE_S}" stroke-width="1.6"/>')
+for i in range(3):
+    add(f'<rect x="{1160 + (4 + i) * 30}" y="230" width="28" height="36" rx="3" fill="#efb27a" stroke="{ORG_S}" stroke-width="1.6"/>')
+for r in range(2):
+    for c in range(4):
+        x, y = 1134 + c * 50, 330 + r * 68
+        add(f'<rect x="{x}" y="{y}" width="46" height="62" rx="3" fill="#5b6b5e" stroke="#2f3a31" stroke-width="2.2"/>')
+        add(f'<rect x="{x + 6}" y="{y + 8}" width="34" height="46" fill="#8fa393"/>')
+text(1237, 512, "Output Video", size=T_SUB, weight="bold")
+text(1237, 544, "(27 frames)", size=T_SUB, weight="bold")
 
-    # ── target box ──────────────────────────────────────────────────────────
-    tx0, ty, tw = 846, y0 + 216, 150
-    tcx, tcy = tx0 + tw / 2, ty + 31          # centre of the target box
-    box(tx0, ty, tw, 62, ORG_F, ORG_S, rx=10, sw=2.0)
-    text(tx0 + 18, ty + 26, "Target", size=T_BOX, weight="bold", fill="#ffffff")
-    rich(tx0 + 18, ty + 46, [("T", 0, None, 1), ("  (14B)", 0, None, 1)],
-         size=T_SMALL, fill="#ffffff")
-    for dy in (0, 11, 22):
-        add(f'<path d="M {tx0 + 92} {ty + 22 + dy} L {tx0 + 110} {ty + 13 + dy} '
-            f'L {tx0 + 128} {ty + 22 + dy} L {tx0 + 110} {ty + 31 + dy} Z" '
-            f'fill="#ffffff" stroke="{ORG_S}" stroke-width="1.2"/>')
+# ── legend ──────────────────────────────────────────────────────────────────
+LT = 28
+text(64, 716, "LEGEND", size=T_BODY, weight="bold", anchor="start")
+box(148, 690, 30, 30, "#5f9fd6", "#3c78b4", rx=6, sw=2)
+text(190, 710, "Draft accepted", size=T_SMALL, anchor="start")
+box(346, 690, 30, 30, "#e8853c", "#a85a20", rx=6, sw=2)
+text(388, 710, "Target regenerated", size=T_SMALL, anchor="start")
+box(600, 690, 30, 30, BLUE_F, BLUE_S, rx=6, sw=2)
+text(642, 710, "Hybrid: drafter runs steps 0…k−1", size=T_SMALL, anchor="start")
+box(966, 690, 30, 30, CASC_F, CASC_S, rx=6, sw=2, dash=True)
+text(1008, 710, "Hybrid: 4-frame proxy score", size=T_SMALL, anchor="start")
 
-    if hybrid:
-        # stitch callout: the target starts at step k of the schedule.
-        # Sits in the column right of the target box, below the reject arrow.
-        text(1030, y0 + 294, "k steps drafter-run", size=T_SMALL - 1,
-             weight="bold", fill="#1d4e7d")
-        path_arrow(f"M 1024 {y0 + 247} L {tx0 + tw + 2} {y0 + 247}",
-                   color=BLUE_S, sw=1.6, marker="arrowblue")
-
-    # regenerated block arrow: leave the target panel through its top wall in
-    # the gap right of the reject X, then run right and down to the filmstrip
-    path_arrow(f"M 1080 {y0 + 220} L 1090 {y0 + 220} L 1090 {y0 + 300} "
-               f"L 1142 {y0 + 300}", color=ORG_S, sw=1.8, marker="arroworg")
-
-    # ── Output ──────────────────────────────────────────────────────────────
-    text(1250, y0 + 66, "KV Cache (Target)", size=T_SUB, weight="bold")
-    add(f'<rect x="1136" y="{y0 + 84}" width="30" height="26" rx="4" '
-        f'fill="#4a4a4a"/>')
-    add(f'<path d="M 1142 {y0 + 84} v -7 a 9 9 0 0 1 18 0 v 7" fill="none" '
-        f'stroke="#4a4a4a" stroke-width="3.6"/>')
-    add(f'<circle cx="1151" cy="{y0 + 95}" r="3.6" fill="#ffffff"/>')
-    for i in range(4):
-        add(f'<rect x="{1174 + i * 26}" y="{y0 + 82}" width="23" height="30" '
-            f'rx="3" fill="{"#7fb0dd" if i % 2 == 0 else "#bcd6ee"}" '
-            f'stroke="{BLUE_S}" stroke-width="1.4"/>')
-    for i in range(3):
-        add(f'<rect x="{1174 + (4 + i) * 26}" y="{y0 + 82}" width="23" '
-            f'height="30" rx="3" fill="#efb27a" stroke="{ORG_S}" '
-            f'stroke-width="1.4"/>')
-    for r in range(2):
-        for c in range(4):
-            x, y = 1150 + c * 44, y0 + 170 + r * 58
-            add(f'<rect x="{x}" y="{y}" width="40" height="52" rx="3" '
-                f'fill="#5b6b5e" stroke="#2f3a31" stroke-width="1.9"/>')
-            add(f'<rect x="{x + 5}" y="{y + 7}" width="30" height="38" '
-                f'fill="#8fa393"/>')
-    text(1250, y0 + 296, "Output Video (27 frames)", size=T_SMALL + 1,
-         weight="bold")
-
-    # ── block-0 note: routing rule shared by both rows, drawn once ──────────
-    if not hybrid:
-        box(892, y0 + 286, 182, 26, NOTE_F, NOTE_S, rx=6, sw=1.4, dash=True)
-        text(983, y0 + 303, "Block 0: always force-reject", size=T_SMALL - 1,
-             weight="bold", fill="#7a5c00")
-
-
-row(ROW_TOP[0], "base", "a")
-row(ROW_TOP[1], "hybrid", "b")
-
-# ── shared legend (bottom) ──────────────────────────────────────────────────
-text(56, 756, "LEGEND", size=T_BODY, weight="bold", anchor="start")
-box(148, 734, 30, 30, "#5f9fd6", "#3c78b4", rx=6, sw=1.8)
-text(190, 754, "Draft accepted", size=T_SMALL + 1, anchor="start")
-box(346, 734, 30, 30, "#e8853c", "#a85a20", rx=6, sw=1.8)
-text(388, 754, "Target regenerated", size=T_SMALL + 1, anchor="start")
-box(600, 734, 30, 30, CASC_F, CASC_S, rx=6, sw=1.8, dash=True)
-text(642, 742, "Cascade: 4-frame proxy,", size=T_SMALL + 1, anchor="start")
-text(642, 764, "full score in the grey band", size=T_SMALL + 1, anchor="start")
-box(918, 734, 30, 30, BLUE_F, BLUE_S, rx=6, sw=1.8)
-text(960, 742, "Stitched: first k target steps", size=T_SMALL + 1, anchor="start")
-text(960, 764, "run in the drafter", size=T_SMALL + 1, anchor="start")
-
+add('</g>')
 add('</svg>')
 
 svg = "\n".join(parts) + "\n"
@@ -396,7 +271,6 @@ os.makedirs("figures", exist_ok=True)
 with open("figures/pipeline.svg", "w") as f:
     f.write(svg)
 print("Saved figures/pipeline.svg")
-
 try:
     import cairosvg
     cairosvg.svg2pdf(bytestring=svg.encode(), write_to="figures/pipeline.pdf")
