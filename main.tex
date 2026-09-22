@@ -281,8 +281,8 @@ replace the PRM with an image quality model as a block-level proxy.
     target KV cache; otherwise the 14B target regenerates the block
     (orange).
     Block~0 is always force-rejected to anchor scene composition.
-    \texttt{SDVG}-hybrid modifies two points of this flow (green and blue
-    annotations): the router scores only 4 of the 12 decoded frames and
+    \texttt{SDVG}-hybrid modifies two points of this flow (panels b and c):
+    the router scores only 4 of the 12 decoded frames and
     runs the full pass solely when the proxy lands in the grey band, and
     on rejected blocks the target resumes from step~$k$ of the schedule
     rather than from the initial noise, the earlier steps being taken
