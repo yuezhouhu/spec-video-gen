@@ -11,7 +11,7 @@ outdir = '/rscratch/yuezhouhu/realtime-video.paper/figures'
 
 prompts = ['003', '000']  # Big Sur drone, Tokyo street
 methods = ['draft', 'rsvg', 'hybrid', 'target']
-method_labels = ['Draft-only', 'SDVG (ours)', 'SDVG-hybrid (ours)', 'Target-only']
+method_labels = ['Draft-only', 'SDVG', 'SDVG-hybrid', 'Target-only']
 frames = [0, 8, 16, 24]
 
 nrows = len(methods)   # 4: draft, rsvg, hybrid, target
