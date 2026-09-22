@@ -214,8 +214,7 @@ This leaves \emph{speculative generation for autoregressive video} as an open pr
 
 In this work, we propose \textbf{Speculative Decoding for Autoregressive Video Generation} (\textbf{\texttt{SDVG}}), a training-free, plug-and-play framework that requires no architectural changes to either the drafter or target. For each video block, the drafter generates a candidate; an image quality router then decides, per block, whether to accept the draft or invoke the target for
 regeneration. On 1003 MovieGenVideoBench prompts at $832{\times}480$ resolution, \texttt{SDVG}
-achieves $98.1\%$ of target-only VisionReward quality ($0.0773$ vs.\ $0.0788$) at a $\mathbf{1.59\times}$ speedup. Importantly, \texttt{SDVG} is \emph{orthogonal} to step-level methods such as T-Stitch or SRDiffusion, which can be directly applied to the target model's generation steps within \texttt{SDVG}.
-% Here add some hybrid mode results
+achieves $98.1\%$ of target-only VisionReward quality ($0.0773$ vs.\ $0.0788$) at a $\mathbf{1.59\times}$ speedup. Importantly, \texttt{SDVG} is \emph{orthogonal} to step-level methods such as T-Stitch or SRDiffusion, which can be directly applied to the target model's generation steps within \texttt{SDVG}. We exploit exactly this orthogonality: by stitching the first three denoising steps of every \emph{rejected} block onto the drafter---while leaving the scene-anchoring first block entirely to the target---and by resolving the router's obvious decisions from a four-frame score before running the full twelve-frame pass, we reach $\mathbf{1.96\times}$ at $96.9\%$ quality retention ($0.0764$ at $49.5$\,s), a point that is both faster and higher-quality than every more aggressive threshold on \texttt{SDVG} alone.
 Our main contributions are as follows:
 \begin{itemize}
   \item We propose \texttt{SDVG}, a training-free speculative generation framework
@@ -232,7 +231,13 @@ Our main contributions are as follows:
     step-level trajectory engineering, a plain reward routing signal
     suffices to match large-model quality---establishing a new,
     simpler baseline for collaborative video generation.
-  \item We further combine XXX % Add some hybrid results
+  \item We further combine \texttt{SDVG} with step-level stitching: the
+    drafter absorbs the first three steps of the target's trajectory on
+    rejected blocks, while the first block stays entirely target-generated
+    because the anchor is what makes stitching admissible; an on-demand
+    cascade turns most router decisions into a four-frame lookup. The
+    combination reaches $1.96\times$ at $96.9\%$ quality retention and
+    dominates the more aggressive thresholds of \texttt{SDVG} alone.
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
