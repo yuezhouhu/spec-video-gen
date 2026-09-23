@@ -576,79 +576,6 @@ Section~\ref{sec:hybrid-results} separates the two contributions.
   \label{fig:pareto}
 \end{figure}
 
-\subsection{Where the Hybrid Gains Come From}
-\label{sec:hybrid-results}
-
-Table~\ref{tab:hybrid} isolates the two mechanisms of
-\texttt{SDVG}-hybrid, both measured at $\tau{=}{-}1.0$.
-
-\begin{table}[t]
-  \caption{%
-    \textbf{\texttt{SDVG}-hybrid ablations.}
-    1003 MovieGenVideoBench prompts, $832{\times}480$, 9 blocks/video,
-    min-frame ImageReward, $\tau{=}{-}1.0$.
-    $k$ is the number of denoising steps a rejected block takes from the
-    drafter rather than from the target.
-    Retention is VisionReward relative to target-only (0.0788).
-  }
-  \label{tab:hybrid}
-  \centering
-  \setlength{\tabcolsep}{10pt}
-  \begin{tabular}{lcccc}
-    \toprule
-    Method & VR $\uparrow$ & Time (s) & Speedup & Retention \\
-    \midrule
-    Target-only & 0.0788 & 97.0 & 1.00$\times$ & 100.0\% \\
-    \midrule
-    \multicolumn{5}{l}{\textit{Step-level stitching, block~0 protected}} \\
-    $k{=}2$ & 0.0756 & 56.2 & 1.73$\times$ & 95.9\% \\
-    $k{=}3$ & \textbf{0.0763} & 51.7 & 1.88$\times$ & \textbf{96.9\%} \\
-    $k{=}4$ & 0.0752 & 52.5 & 1.85$\times$ & 95.5\% \\
-    \midrule
-    \multicolumn{5}{l}{\textit{Stitching block~0 as well}} \\
-    $k{=}2$ & 0.0688 & 58.9 & 1.65$\times$ & 87.3\% \\
-    $k{=}3$ & 0.0677 & 51.6 & 1.88$\times$ & 85.9\% \\
-    $k{=}4$ & 0.0646 & 46.7 & 2.08$\times$ & 82.0\% \\
-    \midrule
-    \multicolumn{5}{l}{\textit{On-demand cascade ($k{=}3$, block~0 protected)}} \\
-    Cascade off (the $k{=}3$ row) & 0.0763 & 51.7 & 1.88$\times$ & 96.9\% \\
-    Cascade on  & 0.0764 & 49.5 & 1.96$\times$ & 96.9\% \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\paragraph{Step-level stitching.}
-Handing the first $k$ denoising steps of a rejected block back to the
-drafter costs nothing---those forward passes were already paid for during
-scoring---and the partially denoised state it hands over is strictly more
-informative than the initial noise the target would otherwise restart
-from.
-$k{=}3$ is the sweet spot: it matches target quality at 0.0763
-(96.9\% retention) while running ${1.88\times}$ faster.
-Smaller $k$ leaves the target more work to redo, and $k{=}4$ hands over
-the entire four-step schedule, leaving the target nothing to refine---the
-rejected block is then effectively the draft, which is exactly what the
-router rejected, and quality falls to 0.0752.
-
-\paragraph{Block~0 must stay target-generated.}
-Stitching block~0 as well collapses quality: at $k{=}3$ the same
-configuration drops from 0.0763 to 0.0677 VisionReward, and the damage
-grows with $k$.
-Block~0 has no prior context, so it fixes the scene that every later
-block attends to; letting a truncated drafter trajectory define it
-commits the whole video to a composition the target never refines, and
-the error compounds through the shared cache.
-
-\paragraph{On-demand cascade.}
-Scoring four of the twelve decoded frames rather than all twelve removes
-most of the routing cost without changing decisions that matter: at
-$\tau{=}{-}1.0$ only $9.1\%$ of blocks fall inside the ambiguity band and
-need the full pass, which saves $2.2$\,s (${1.88\times}$ to
-${1.96\times}$) at unchanged VisionReward and retention.
-The band narrows as the threshold loosens---from $11.5\%$ of blocks at
-$\tau{=}{-}0.7$ to $3.6\%$ at $\tau{=}{-}2.0$---so the saving scales with
-how conservative the operating point is.
-
 \subsection{Ablation Studies}
 \label{sec:ablation}
 
@@ -723,6 +650,79 @@ blocks.
 \end{table}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Where the Hybrid Gains Come From}
+\label{sec:hybrid-results}
+
+Table~\ref{tab:hybrid} isolates the two mechanisms of
+\texttt{SDVG}-hybrid, both measured at $\tau{=}{-}1.0$.
+
+\begin{table}[t]
+  \caption{%
+    \textbf{\texttt{SDVG}-hybrid ablations.}
+    1003 MovieGenVideoBench prompts, $832{\times}480$, 9 blocks/video,
+    min-frame ImageReward, $\tau{=}{-}1.0$.
+    $k$ is the number of denoising steps a rejected block takes from the
+    drafter rather than from the target.
+    Retention is VisionReward relative to target-only (0.0788).
+  }
+  \label{tab:hybrid}
+  \centering
+  \setlength{\tabcolsep}{10pt}
+  \begin{tabular}{lcccc}
+    \toprule
+    Method & VR $\uparrow$ & Time (s) & Speedup & Retention \\
+    \midrule
+    Target-only & 0.0788 & 97.0 & 1.00$\times$ & 100.0\% \\
+    \midrule
+    \multicolumn{5}{l}{\textit{Step-level stitching, block~0 protected}} \\
+    $k{=}2$ & 0.0756 & 56.2 & 1.73$\times$ & 95.9\% \\
+    $k{=}3$ & \textbf{0.0763} & 51.7 & 1.88$\times$ & \textbf{96.9\%} \\
+    $k{=}4$ & 0.0752 & 52.5 & 1.85$\times$ & 95.5\% \\
+    \midrule
+    \multicolumn{5}{l}{\textit{Stitching block~0 as well}} \\
+    $k{=}2$ & 0.0688 & 58.9 & 1.65$\times$ & 87.3\% \\
+    $k{=}3$ & 0.0677 & 51.6 & 1.88$\times$ & 85.9\% \\
+    $k{=}4$ & 0.0646 & 46.7 & 2.08$\times$ & 82.0\% \\
+    \midrule
+    \multicolumn{5}{l}{\textit{On-demand cascade ($k{=}3$, block~0 protected)}} \\
+    Cascade off (the $k{=}3$ row) & 0.0763 & 51.7 & 1.88$\times$ & 96.9\% \\
+    Cascade on  & 0.0764 & 49.5 & 1.96$\times$ & 96.9\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Step-level stitching.}
+Handing the first $k$ denoising steps of a rejected block back to the
+drafter costs nothing---those forward passes were already paid for during
+scoring---and the partially denoised state it hands over is strictly more
+informative than the initial noise the target would otherwise restart
+from.
+$k{=}3$ is the sweet spot: it matches target quality at 0.0763
+(96.9\% retention) while running ${1.88\times}$ faster.
+Smaller $k$ leaves the target more work to redo, and $k{=}4$ hands over
+the entire four-step schedule, leaving the target nothing to refine---the
+rejected block is then effectively the draft, which is exactly what the
+router rejected, and quality falls to 0.0752.
+
+\paragraph{Block~0 must stay target-generated.}
+Stitching block~0 as well collapses quality: at $k{=}3$ the same
+configuration drops from 0.0763 to 0.0677 VisionReward, and the damage
+grows with $k$.
+Block~0 has no prior context, so it fixes the scene that every later
+block attends to; letting a truncated drafter trajectory define it
+commits the whole video to a composition the target never refines, and
+the error compounds through the shared cache.
+
+\paragraph{On-demand cascade.}
+Scoring four of the twelve decoded frames rather than all twelve removes
+most of the routing cost without changing decisions that matter: at
+$\tau{=}{-}1.0$ only $9.1\%$ of blocks fall inside the ambiguity band and
+need the full pass, which saves $2.2$\,s (${1.88\times}$ to
+${1.96\times}$) at unchanged VisionReward and retention.
+The band narrows as the threshold loosens---from $11.5\%$ of blocks at
+$\tau{=}{-}0.7$ to $3.6\%$ at $\tau{=}{-}2.0$---so the saving scales with
+how conservative the operating point is.
+
 \subsection{Cross-Benchmark Check with EvalCrafter}
 \label{sec:evalcrafter}
 
