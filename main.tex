@@ -451,6 +451,7 @@ two boundary baselines.
     Main results on 1003 MovieGenVideoBench prompts
     ($832{\times}480$, 9 blocks/video).
     VR = VisionReward (higher is better).
+    Ret.\ = VisionReward as a percentage of target-only.
     Time = average wall-clock time per video.
     Speedup is relative to target-only.
     Accept rate is over all nine blocks, so the always-rejected block~0
@@ -460,64 +461,62 @@ two boundary baselines.
     left to the target; the rows differ only in the routing threshold.
     The lower panel reports the EvalCrafter metrics for the same settings;
     arrows follow the direction EvalCrafter's fitted aggregation rewards,
-    which for IS, action, flow and OCR is \emph{lower} is better.
+    which for IS, action and flow is \emph{lower} is better.
     warp = optical-flow warping error, BLEU = BLIP caption BLEU,
-    detect = object detection rate, OCR = text recognition rate.
-    The OCR column is not comparable across rows: that metric covers only
-    a subset of videos, and the subsets differ between settings.
+    detect = object detection rate.
   }
   \label{tab:main}
   \centering
-  \setlength{\tabcolsep}{13pt}
+  \setlength{\tabcolsep}{9pt}
   % \small
-  \begin{tabular}{llccccc}
+  \begin{tabular}{llcccccc}
     \toprule
-    Method & $\tau$ & VR $\uparrow$ & Time (s) & Speedup & Accept \\
+    Method & $\tau$ & VR $\uparrow$ & Ret.\ (\%) & Time (s) & Speedup & Accept \\
     \midrule
-    Target-only        & ---    & 0.0788 & 97.0 & 1.00$\times$ & ---    \\
+    Target-only        & ---    & 0.0788 & 100.0 & 97.0 & 1.00$\times$ & ---    \\
     \midrule
-    \texttt{SDVG}      & $-0.7$ & 0.0773 & 60.9 & 1.59$\times$ & 73.1\% \\
-    \texttt{SDVG}      & $-0.8$ & 0.0769 & 58.6 & 1.66$\times$ & 74.9\% \\
-    \texttt{SDVG}      & $-0.9$ & 0.0771 & 58.3 & 1.66$\times$ & 76.4\% \\
-    \texttt{SDVG}      & $-1.0$ & 0.0764 & 57.2 & 1.69$\times$ & 78.0\% \\
-    \texttt{SDVG}      & $-1.5$ & 0.0757 & 51.6 & 1.88$\times$ & 83.4\% \\
-    \texttt{SDVG}      & $-2.0$ & 0.0756 & 47.4 & 2.05$\times$ & 87.5\% \\
-    \texttt{SDVG}      & $-2.5$ & 0.0754 & 46.4 & 2.09$\times$ & 88.9\% \\
+    \texttt{SDVG}      & $-0.7$ & 0.0773 & 98.10 & 60.9 & 1.59$\times$ & 73.1\% \\
+    \texttt{SDVG}      & $-0.8$ & 0.0769 & 97.59 & 58.6 & 1.66$\times$ & 74.9\% \\
+    \texttt{SDVG}      & $-0.9$ & 0.0771 & 97.84 & 58.3 & 1.66$\times$ & 76.4\% \\
+    \texttt{SDVG}      & $-1.0$ & 0.0764 & 96.95 & 57.2 & 1.69$\times$ & 78.0\% \\
+    \texttt{SDVG}      & $-1.5$ & 0.0757 & 96.07 & 51.6 & 1.88$\times$ & 83.4\% \\
+    \texttt{SDVG}      & $-2.0$ & 0.0756 & 95.94 & 47.4 & 2.05$\times$ & 87.5\% \\
+    \texttt{SDVG}      & $-2.5$ & 0.0754 & 95.69 & 46.4 & 2.09$\times$ & 88.9\% \\
     \midrule
-    \texttt{SDVG}-hybrid & $-0.7$ & 0.0772 & 51.6 & 1.88$\times$ & 72.8\% \\
-    \texttt{SDVG}-hybrid & $-1.0$ & 0.0764 & 49.5 & 1.96$\times$ & 77.5\% \\
-    \texttt{SDVG}-hybrid & $-1.5$ & 0.0759 & 48.2 & 2.01$\times$ & 83.2\% \\
-    \texttt{SDVG}-hybrid & $-2.0$ & 0.0751 & 46.1 & 2.11$\times$ & 87.4\% \\
+    \texttt{SDVG}-hybrid & $-0.7$ & 0.0772 & 97.97 & 51.6 & 1.88$\times$ & 72.8\% \\
+    \texttt{SDVG}-hybrid & $-1.0$ & 0.0764 & 96.95 & 49.5 & 1.96$\times$ & 77.5\% \\
+    \texttt{SDVG}-hybrid & $-1.5$ & 0.0759 & 96.32 & 48.2 & 2.01$\times$ & 83.2\% \\
+    \texttt{SDVG}-hybrid & $-2.0$ & 0.0751 & 95.30 & 46.1 & 2.11$\times$ & 87.4\% \\
     \midrule
-    Draft-only         & ---    & 0.0644 & 25.7 & 3.77$\times$ & ---    \\
+    Draft-only         & ---    & 0.0644 & 81.73 & 25.7 & 3.77$\times$ & ---    \\
     \bottomrule
   \end{tabular}
 
   \vspace{7pt}
   \setlength{\tabcolsep}{3.5pt}
   \small
-  \begin{tabular}{llcccccccc}
+  \begin{tabular}{llccccccc}
     \toprule
     Method & $\tau$ & VQA\_T $\uparrow$ & IS $\downarrow$ & warp $\downarrow$
            & action $\downarrow$ & flow $\downarrow$
-           & BLEU $\uparrow$ & detect $\uparrow$ & OCR $\downarrow$ \\
+           & BLEU $\uparrow$ & detect $\uparrow$ \\
     \midrule
-    Target-only        & ---    & 93.33 & 18.62 & 0.0066 & 45.18 & 4.99 & 21.66 & 78.09 & 13.99 \\
+    Target-only        & ---    & 93.33 & 18.62 & 0.0066 & 45.18 & 4.99 & 21.66 & 78.09 \\
     \midrule
-    \texttt{SDVG}      & $-0.7$ & 93.11 & 18.99 & 0.0085 & 45.38 & 5.16 & 21.92 & 77.85 & 5.10 \\
-    \texttt{SDVG}      & $-0.8$ & 93.09 & 18.91 & 0.0086 & 45.30 & 5.18 & 21.82 & 78.29 & 4.91 \\
-    \texttt{SDVG}      & $-0.9$ & 93.12 & 19.12 & 0.0087 & 45.28 & 5.18 & 21.87 & 78.12 & 5.71 \\
-    \texttt{SDVG}      & $-1.0$ & 93.08 & 19.17 & 0.0088 & 45.29 & 5.18 & 21.89 & 78.44 & 4.94 \\
-    \texttt{SDVG}      & $-1.5$ & 92.81 & 19.15 & 0.0090 & 45.28 & 5.31 & 21.74 & 78.54 & 5.44 \\
-    \texttt{SDVG}      & $-2.0$ & 93.04 & 19.20 & 0.0092 & 45.45 & 5.35 & 21.73 & 78.70 & 4.73 \\
-    \texttt{SDVG}      & $-2.5$ & 92.91 & 19.16 & 0.0093 & 45.42 & 5.35 & 21.74 & 77.99 & 5.33 \\
+    \texttt{SDVG}      & $-0.7$ & 93.11 & 18.99 & 0.0085 & 45.38 & 5.16 & 21.92 & 77.85 \\
+    \texttt{SDVG}      & $-0.8$ & 93.09 & 18.91 & 0.0086 & 45.30 & 5.18 & 21.82 & 78.29 \\
+    \texttt{SDVG}      & $-0.9$ & 93.12 & 19.12 & 0.0087 & 45.28 & 5.18 & 21.87 & 78.12 \\
+    \texttt{SDVG}      & $-1.0$ & 93.08 & 19.17 & 0.0088 & 45.29 & 5.18 & 21.89 & 78.44 \\
+    \texttt{SDVG}      & $-1.5$ & 92.81 & 19.15 & 0.0090 & 45.28 & 5.31 & 21.74 & 78.54 \\
+    \texttt{SDVG}      & $-2.0$ & 93.04 & 19.20 & 0.0092 & 45.45 & 5.35 & 21.73 & 78.70 \\
+    \texttt{SDVG}      & $-2.5$ & 92.91 & 19.16 & 0.0093 & 45.42 & 5.35 & 21.74 & 77.99 \\
     \midrule
-    \texttt{SDVG}-hybrid & $-0.7$ & 92.94 & 19.13 & 0.0089 & 45.49 & 5.39 & 21.87 & 78.19 & 5.87 \\
-    \texttt{SDVG}-hybrid & $-1.0$ & 92.94 & 19.01 & 0.0091 & 45.38 & 5.38 & 21.88 & 77.88 & 4.81 \\
-    \texttt{SDVG}-hybrid & $-1.5$ & 93.13 & 19.12 & 0.0092 & 45.47 & 5.37 & 21.86 & 77.90 & 4.09 \\
-    \texttt{SDVG}-hybrid & $-2.0$ & 92.98 & 19.08 & 0.0092 & 45.48 & 5.36 & 21.78 & 77.82 & 5.92 \\
+    \texttt{SDVG}-hybrid & $-0.7$ & 92.94 & 19.13 & 0.0089 & 45.49 & 5.39 & 21.87 & 78.19 \\
+    \texttt{SDVG}-hybrid & $-1.0$ & 92.94 & 19.01 & 0.0091 & 45.38 & 5.38 & 21.88 & 77.88 \\
+    \texttt{SDVG}-hybrid & $-1.5$ & 93.13 & 19.12 & 0.0092 & 45.47 & 5.37 & 21.86 & 77.90 \\
+    \texttt{SDVG}-hybrid & $-2.0$ & 92.98 & 19.08 & 0.0092 & 45.48 & 5.36 & 21.78 & 77.82 \\
     \midrule
-    Draft-only         & ---    & 92.75 & 19.52 & 0.0102 & 46.95 & 5.90 & 21.00 & 72.57 & 48.19 \\
+    Draft-only         & ---    & 92.75 & 19.52 & 0.0102 & 46.95 & 5.90 & 21.00 & 72.57 \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -556,15 +555,18 @@ The inflection around $\tau \in [-1.0, -0.7]$ (73--78\% acceptance)
 identifies the operating regime where \texttt{SDVG} delivers the most favorable
 quality--efficiency balance.
 
-\paragraph{\texttt{SDVG}-hybrid dominates the sweep.}
+\paragraph{\texttt{SDVG}-hybrid extends the frontier.}
 Adding step-level stitching ($k{=}3$, block~0 left to the target) and
 on-demand cascade scoring to the $\tau{=}{-}1.0$ operating point yields
 0.0764 VisionReward at 49.5\,s, a \textbf{1.96$\times$} speedup at
 ${96.9\%}$ of target quality (Table~\ref{tab:main}).
-That single point is both faster and higher-quality than every
-\texttt{SDVG} setting more aggressive than $\tau{=}{-}1.0$: stitching
-recovers the target's trajectory instead of replaying it, and the
-cascade removes most of the scoring cost.
+It beats \texttt{SDVG} $\tau{=}{-}1.5$ on both axes---faster and
+higher-quality---because stitching recovers the target's trajectory
+instead of replaying it and the cascade removes most of the scoring cost.
+The more aggressive \texttt{SDVG} thresholds buy their last $0.1\times$
+of speedup by giving up $0.001$ VisionReward---about $1\%$ of target
+quality---which is where the hybrid curve pulls away from the base sweep
+(Figure~\ref{fig:pareto}).
 Section~\ref{sec:hybrid-results} separates the two contributions.
 
 \begin{figure}[t]
@@ -572,8 +574,16 @@ Section~\ref{sec:hybrid-results} separates the two contributions.
   \includegraphics[width=0.7\linewidth]{figures/quality_speed_tradeoff}
   \caption{%
     \textbf{Quality--speed Pareto curve.}
-    \texttt{SDVG} ($\tau{=}{-}0.7$) achieves 98.1\% of target quality at
-    1.59$\times$ speedup, operating between draft-only and target-only.
+    VisionReward against speedup over target-only for the threshold sweeps
+    of \texttt{SDVG} and \texttt{SDVG}-hybrid (min-frame scoring, with the
+    four-frame cascade proxy on the hybrid rows); the dashed line is
+    target-only, and draft-only ($3.77\times$, $0.0644$) is off-scale.
+    The \texttt{SDVG}-hybrid curve sits above the \texttt{SDVG} curve
+    through $2.0\times$, with the gap widest at the conservative end:
+    hybrid $\tau{=}{-}0.7$ matches \texttt{SDVG} $\tau{=}{-}0.7$ quality
+    9.3\,s sooner. Beyond that the two sweeps converge, and at
+    $2.11\times$ the hybrid has already dropped below the best
+    \texttt{SDVG} threshold.
   }
   \label{fig:pareto}
 \end{figure}
