@@ -128,8 +128,9 @@ can be seamlessly integrated into existing autoregressive video generation pipel
       Draft-only (top) is fast but produces lower-fidelity output;
       Target-only (bottom) achieves the highest quality at the cost of
       slow inference.
-      \texttt{SDVG} closely matches target quality while running
-      \textbf{1.59$\times$ faster}, and \texttt{SDVG}-hybrid matches it at
+      \texttt{SDVG} ($\tau{=}{-}0.7$) closely matches target quality while
+      running \textbf{1.59$\times$ faster}, and \texttt{SDVG}-hybrid
+      ($k{=}3$, $\tau{=}{-}1.0$, cascade) matches it at
       \textbf{1.96$\times$}.
       Prompts: (top) \textit{``Drone view of waves crashing against the rugged
       cliffs along Big Sur\ldots''};
@@ -201,7 +202,7 @@ In this work, we propose \textbf{Speculative Decoding for Autoregressive Video G
     quality--speed knob, mandatory first-block regeneration to
     anchor scene composition, and worst-frame quality scoring to surface
     single-frame artifacts masked by block averages. 
-  \item \textbf{Pushing Acceleration Limits (\texttt{SDVG}-hybrid)}: We further push the limit of acceleration by proposing \texttt{SDVG}-hybrid, a combination with step-level stitching. \texttt{SDVG}-hybrid adopts more aggressive decoding strategies: the drafter absorbs the first $k$ steps of the target's trajectory on rejected blocks, and an on-demand cascade turns most router decisions into a four-frame lookup. When $k=3$, the combination reaches $\mathbf{1.96\times}$ at $96.9\%$ quality retention and dominates the more aggressive thresholds of \texttt{SDVG} alone.
+  \item \textbf{Pushing Acceleration Limits (\texttt{SDVG}-hybrid)}: We further push the limit of acceleration by proposing \texttt{SDVG}-hybrid, a combination with step-level stitching. \texttt{SDVG}-hybrid adopts more aggressive decoding strategies: the drafter absorbs the first $k$ steps of the target's trajectory on rejected blocks, and an on-demand cascade turns most router decisions into a four-frame lookup. At $k{=}3$ and $\tau{=}{-}1.0$, with block~0 kept target-generated, the combination reaches $\mathbf{1.96\times}$ at $96.9\%$ quality retention and dominates the more aggressive thresholds of \texttt{SDVG} alone.
 \end{itemize}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -402,8 +403,7 @@ distilled from Wan2.1-T2V-14B via Self-Forcing \citep{huang2025selfforcingbridgi
 The \emph{drafter} is the original Wan2.1-T2V-1.3B Self-Forcing model.
 Both models share the same causal attention backbone with KV caching via
 RoPE positional embeddings, and run 4 denoising steps per block using the
-schedule $\mathbf{t} = [1000, 937, 833, 625, 0]$ in bfloat16 precision
-(guidance scale 3.0, timestep shift 5.0).
+schedule $\mathbf{t} = [1000, 937, 833, 625, 0]$.
 The reward router uses ImageReward \citep{xu2023imagerewardlearningevaluatinghuman}, an
 off-the-shelf text-image reward model, to score decoded draft frames.
 
@@ -411,8 +411,6 @@ off-the-shelf text-image reward model, to score decoded draft frames.
 Each video consists of $B{=}9$ autoregressive blocks. Each block corresponds to 3 latent frames (27 latent frames in total). The causal VAE
 decoder produce $9$ pixel frames for the first video block and $12$ pixel frames per later video block at $832 \times 480$ resolution.
 All runs use a fixed random seed (42) for reproducibility.
-The routing threshold is set to $\tau{=}{-}0.7$ (min-frame ImageReward)
-unless otherwise noted.
 
 \paragraph{Hardware and implementation.}
 All experiments are conducted on two NVIDIA RTX A6000 GPUs (48\,GB each).
@@ -420,30 +418,16 @@ GPU\,0 hosts the diffusion transformer (both target and drafter);
 GPU\,1 hosts the text encoder (UMT5-XXL), causal VAE, and ImageReward.
 CUDA streams overlap cross-device transfers with compute so that reward
 scoring does not block denoising.
-The VAE decode cache is cloned before draft scoring and restored upon
-rejection to preserve temporal consistency across blocks.
 
 \paragraph{Evaluation benchmarks and metrics.}
 We draw prompts from MovieGenVideoBench \citep{polyak2024movie}, which
 spans diverse categories including landscapes, animals, human activities,
-and cinematic footage.
-We report results on the full 1003-prompt set.
+and cinematic footage, totaling a 1003-prompt set.
 Video quality is measured by {VisionReward} \citep{xu2026visionrewardfinegrainedmultidimensionalhuman},
-a VQA-based metric that aggregates 29 questions covering visual quality,
-temporal consistency, motion naturalness, and text--video alignment.
+and EvalCrafter \citep{liu2024evalcrafterbenchmarkingevaluatinglarge}.
 Efficiency is measured by {wall-clock time} per video (excluding
 model loading and warmup), and the resulting {speedup} relative to
 target-only generation.
-To check that our conclusions are not an artifact of a single metric, we
-also score the same videos with {EvalCrafter} \citep{liu2024evalcrafter},
-which aggregates objective metrics into four dimensions---visual quality,
-text--video alignment, motion quality, and temporal consistency---plus
-their total.
-As Section~\ref{sec:evalcrafter} details, those dimensions live on
-different scales and the aggregation reweights itself around the metrics
-that could be computed on our prompts, so we use EvalCrafter to compare
-our own settings against each other rather than to quote absolute
-leaderboard numbers.
 
 \paragraph{Baselines.}
 We compare against two boundary baselines:
@@ -451,11 +435,9 @@ We compare against two boundary baselines:
 (maximum speed, lowest quality);
 \emph{Target-only}---all blocks generated by the 14B target
 (minimum speed, highest quality).
-\texttt{SDVG} operates between these extremes by selectively routing blocks.
-For \texttt{SDVG}-hybrid we sweep the number of stitched denoising steps
-$k \in \{2,3,4\}$, whether block~0 is stitched as well, and whether
-on-demand cascade scoring is enabled; all hybrid rows use the fixed
-threshold $\tau{=}{-}1.0$ unless stated otherwise.
+\texttt{SDVG} and \texttt{SDVG}-hybrid operates between these extremes by sweeping the routing threshold,
+the number of stitched denoising steps, and whether
+on-demand cascade scoring is enabled.
 
 \subsection{Main Results}
 \label{sec:main-results}
@@ -494,7 +476,7 @@ two boundary baselines.
     \texttt{SDVG} ($\tau{=}{-}2.0$)            & 0.0756 & 47.4 & 2.05$\times$ & 87.5\% \\
     \texttt{SDVG} ($\tau{=}{-}2.5$)            & 0.0754 & 46.4 & 2.09$\times$ & 88.9\% \\
     \midrule
-    \texttt{SDVG}-hybrid ($k{=}3$, cascade)
+    \texttt{SDVG}-hybrid ($k{=}3$, $\tau{=}{-}1.0$, cascade)
                                       & 0.0764 & 49.5 & 1.96$\times$ & ---    \\
     \midrule
     Draft-only                        & 0.0644 & 25.7 & 3.77$\times$ & ---    \\
@@ -537,10 +519,10 @@ identifies the operating regime where \texttt{SDVG} delivers the most favorable
 quality--efficiency balance.
 
 \paragraph{\texttt{SDVG}-hybrid dominates the sweep.}
-Adding step-level stitching and on-demand cascade scoring to the
-$\tau{=}{-}1.0$ operating point yields 0.0764 VisionReward at 49.5\,s, a
-\textbf{1.96$\times$} speedup at ${96.9\%}$ of target quality
-(Table~\ref{tab:main}).
+Adding step-level stitching ($k{=}3$, block~0 left to the target) and
+on-demand cascade scoring to the $\tau{=}{-}1.0$ operating point yields
+0.0764 VisionReward at 49.5\,s, a \textbf{1.96$\times$} speedup at
+${96.9\%}$ of target quality (Table~\ref{tab:main}).
 That single point is both faster and higher-quality than every
 \texttt{SDVG} setting more aggressive than $\tau{=}{-}1.0$: stitching
 recovers the target's trajectory instead of replaying it, and the
@@ -709,7 +691,8 @@ blocks.
 \label{sec:evalcrafter}
 
 VisionReward is itself a learned reward model, so we re-score the same
-1003 videos with EvalCrafter \citep{liu2024evalcrafter}, an independent
+1003 videos with EvalCrafter
+\citep{liu2024evalcrafterbenchmarkingevaluatinglarge}, an independent
 benchmark that aggregates objective metrics---aesthetic and technical
 quality, CLIP-based alignment and temporal consistency, optical-flow
 motion statistics, and object, action and OCR detection---into four
@@ -740,8 +723,8 @@ dimensions plus their total (Table~\ref{tab:evalcrafter}).
     \texttt{SDVG} ($\tau{=}{-}1.5$) & 69.27 & 175.42 & 53.30 & 59.70 & 358 \\
     \texttt{SDVG} ($\tau{=}{-}2.5$) & 69.27 & 173.15 & 53.26 & 59.55 & 355 \\
     \midrule
-    \texttt{SDVG}-hybrid ($k{=}3$) & 69.27 & 173.77 & 53.29 & 59.67 & 356 \\
-    \texttt{SDVG}-hybrid ($+$cascade) & 69.29 & 170.94 & 53.28 & 59.68 & 353 \\
+    \texttt{SDVG}-hybrid ($k{=}3$, $\tau{=}{-}1.0$) & 69.27 & 173.77 & 53.29 & 59.67 & 356 \\
+    \texttt{SDVG}-hybrid ($k{=}3$, $\tau{=}{-}1.0$, cascade) & 69.29 & 170.94 & 53.28 & 59.68 & 353 \\
     \midrule
     Draft-only & 69.45 & 166.96 & 52.83 & 59.16 & 348 \\
     \bottomrule
