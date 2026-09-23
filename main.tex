@@ -658,8 +658,8 @@ mechanism can be read off on its own.
     $k$ is the number of denoising steps a rejected block takes from the
     drafter rather than from the target.
     Retention is VisionReward relative to target-only (0.0788).
-    The default row is the full configuration; each group below names the
-    settings it varies and the ones it switches off.
+    The default row is the full configuration and the groups below vary one
+    factor at a time, each naming the settings it changes.
   }
   \label{tab:hybrid}
   \centering
@@ -683,11 +683,15 @@ mechanism can be read off on its own.
     $k{=}3$ & 0.0677 & 51.6 & 1.88$\times$ & 85.9\% \\
     $k{=}4$ & 0.0646 & 46.7 & 2.08$\times$ & 82.0\% \\
     \midrule
-    \multicolumn{5}{l}{\textit{Varying the threshold ($k{=}3$, block~0 protected, cascade off)}} \\
-    $\tau{=}{-}0.7$ & 0.0766 & 54.3 & 1.79$\times$ & 97.2\% \\
-    $\tau{=}{-}1.0$ & 0.0763 & 51.7 & 1.88$\times$ & 96.9\% \\
-    $\tau{=}{-}1.5$ & 0.0760 & 49.1 & 1.97$\times$ & 96.4\% \\
-    $\tau{=}{-}2.0$ & 0.0758 & 49.3 & 1.97$\times$ & 96.2\% \\
+    \multicolumn{5}{l}{\textit{Varying the threshold ($k{=}3$, block~0 protected)}} \\
+    $\tau{=}{-}0.7$, cascade off & 0.0766 & 54.3 & 1.79$\times$ & 97.2\% \\
+    $\tau{=}{-}0.7$, cascade on  & 0.0772 & 51.6 & 1.88$\times$ & 98.0\% \\
+    $\tau{=}{-}1.0$, cascade off & 0.0763 & 51.7 & 1.88$\times$ & 96.9\% \\
+    $\tau{=}{-}1.0$, cascade on  & 0.0764 & 49.5 & 1.96$\times$ & 96.9\% \\
+    $\tau{=}{-}1.5$, cascade off & 0.0760 & 49.1 & 1.97$\times$ & 96.4\% \\
+    $\tau{=}{-}1.5$, cascade on  & 0.0759 & 48.2 & 2.01$\times$ & 96.3\% \\
+    $\tau{=}{-}2.0$, cascade off & 0.0758 & 49.3 & 1.97$\times$ & 96.2\% \\
+    $\tau{=}{-}2.0$, cascade on  & 0.0751 & 46.1 & 2.11$\times$ & 95.3\% \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -723,11 +727,10 @@ ${1.96\times}$) at unchanged VisionReward and retention.
 The band narrows as the threshold loosens---from $11.5\%$ of blocks at
 $\tau{=}{-}0.7$ to $3.6\%$ at $\tau{=}{-}2.0$---so the saving scales with
 how conservative the operating point is.
-Re-sweeping the threshold with the cascade switched off does not recover
-the same operating point: those rows span 0.0758--0.0766 VisionReward at
-49.1--54.3\,s, so matching the cascade's quality costs at least another
-$2.2$\,s ($\tau{=}{-}0.7$ at 54.3\,s), and the thresholds that run as fast
-as it sit $0.0004$--$0.0006$ lower.
+Pairing the two at each threshold shows what the cascade is worth: it buys
+between $0.9$ and $3.2$\,s while VisionReward moves by at most $0.0007$ in
+either direction, so the saving is essentially free at the conservative
+thresholds and only starts to cost a little at $\tau{=}{-}2.0$.
 
 \section{Limitations}
 
