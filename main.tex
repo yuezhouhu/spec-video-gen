@@ -456,22 +456,20 @@ scores.
 
 \begin{table}[t]
   \caption{%
-    Main results on 1003 MovieGenVideoBench prompts
-    ($832{\times}480$, 9 blocks/video).
-    VR = VisionReward (higher is better).
-    Ret.\ = VisionReward as a percentage of target-only.
-    Time = average wall-clock time per video.
-    Speedup is relative to target-only.
-    Accept rate is over all nine blocks, so the always-rejected block~0
-    counts as a rejection.
+    \textbf{Main results on MovieGenVideoBench.}
+    \texttt{SDVG} and \texttt{SDVG}-hybrid across the routing threshold.
+    VR is VisionReward, higher being better, and Ret.\ is the same
+    quantity expressed as a percentage of target-only.
     Every \texttt{SDVG}-hybrid row stitches $k{=}3$ denoising steps of a
-    rejected block and scores a four-frame cascade proxy, with block~0
-    left to the target; the rows differ only in the routing threshold.
-    The lower panel reports the EvalCrafter metrics for the same settings;
-    arrows follow the direction EvalCrafter's fitted aggregation rewards,
-    which for IS, action and flow is \emph{lower} is better.
-    warp = optical-flow warping error, BLEU = BLIP caption BLEU,
-    detect = object detection rate.
+    rejected block and resolves most routing decisions from a four-frame
+    proxy before falling back on all twelve, leaving block~0 to the
+    target, so the rows differ only in the threshold.
+    The lower panel reports EvalCrafter's raw metrics for the same
+    settings, with the arrows following the direction that benchmark's
+    fitted aggregation rewards (for IS, action score and flow score,
+    lower is better) and with \emph{warp} denoting the optical-flow
+    warping error, \emph{BLEU} the BLIP caption BLEU, and \emph{detect}
+    the object detection rate.
   }
   \label{tab:main}
   \centering
@@ -568,15 +566,12 @@ Section~\ref{sec:hybrid-results} separates the two contributions.
   \caption{%
     \textbf{Quality--speed Pareto curve.}
     VisionReward against speedup over target-only for the threshold sweeps
-    of \texttt{SDVG} and \texttt{SDVG}-hybrid (min-frame scoring, with the
-    four-frame cascade proxy on the hybrid rows); the dashed line is
-    target-only, and draft-only ($3.77\times$, $0.0644$) is off-scale.
+    of \texttt{SDVG} and \texttt{SDVG}-hybrid; the dashed line is
+    target-only.
     The \texttt{SDVG}-hybrid curve sits above the \texttt{SDVG} curve
     through $2.0\times$, with the gap widest at the conservative end:
     hybrid $\tau{=}{-}0.7$ matches \texttt{SDVG} $\tau{=}{-}0.7$ quality
-    9.3\,s sooner. Beyond that the two sweeps converge, the hybrid's
-    $\tau{=}{-}2.0$ endpoint reaching $2.11\times$ at the cost of
-    $95.3\%$ retention.
+    9.3\,s sooner.
   }
   \label{fig:pareto}
 \end{figure}
