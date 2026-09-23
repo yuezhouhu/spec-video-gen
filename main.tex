@@ -458,32 +458,66 @@ two boundary baselines.
     Every \texttt{SDVG}-hybrid row stitches $k{=}3$ denoising steps of a
     rejected block and scores a four-frame cascade proxy, with block~0
     left to the target; the rows differ only in the routing threshold.
+    The lower panel reports the EvalCrafter metrics for the same settings;
+    arrows follow the direction EvalCrafter's fitted aggregation rewards,
+    which for IS, action, flow and OCR is \emph{lower} is better.
+    warp = optical-flow warping error, BLEU = BLIP caption BLEU,
+    detect = object detection rate, OCR = text recognition rate.
+    The OCR column is not comparable across rows: that metric covers only
+    a subset of videos, and the subsets differ between settings.
   }
   \label{tab:main}
   \centering
   \setlength{\tabcolsep}{13pt}
   % \small
-  \begin{tabular}{lccccc}
+  \begin{tabular}{llccccc}
     \toprule
-    Method & VR $\uparrow$ & Time (s) & Speedup & Accept \\
+    Method & $\tau$ & VR $\uparrow$ & Time (s) & Speedup & Accept \\
     \midrule
-    Target-only                       & 0.0788 & 97.0 & 1.00$\times$ & ---    \\
+    Target-only        & ---    & 0.0788 & 97.0 & 1.00$\times$ & ---    \\
     \midrule
-    \texttt{SDVG} ($\tau{=}{-}0.7$)            & 0.0773 & 60.9 & 1.59$\times$ & 73.1\% \\
-    \texttt{SDVG} ($\tau{=}{-}0.8$)            & 0.0769 & 58.6 & 1.66$\times$ & 74.9\% \\
-    \texttt{SDVG} ($\tau{=}{-}0.9$)            & 0.0771 & 58.3 & 1.66$\times$ & 76.4\% \\
-    \texttt{SDVG} ($\tau{=}{-}1.0$)            & 0.0764 & 57.2 & 1.69$\times$ & 78.0\% \\
-    \texttt{SDVG} ($\tau{=}{-}1.5$)            & 0.0757 & 51.6 & 1.88$\times$ & 83.4\% \\
-    \texttt{SDVG} ($\tau{=}{-}2.0$)            & 0.0756 & 47.4 & 2.05$\times$ & 87.5\% \\
-    \texttt{SDVG} ($\tau{=}{-}2.5$)            & 0.0754 & 46.4 & 2.09$\times$ & 88.9\% \\
+    \texttt{SDVG}      & $-0.7$ & 0.0773 & 60.9 & 1.59$\times$ & 73.1\% \\
+    \texttt{SDVG}      & $-0.8$ & 0.0769 & 58.6 & 1.66$\times$ & 74.9\% \\
+    \texttt{SDVG}      & $-0.9$ & 0.0771 & 58.3 & 1.66$\times$ & 76.4\% \\
+    \texttt{SDVG}      & $-1.0$ & 0.0764 & 57.2 & 1.69$\times$ & 78.0\% \\
+    \texttt{SDVG}      & $-1.5$ & 0.0757 & 51.6 & 1.88$\times$ & 83.4\% \\
+    \texttt{SDVG}      & $-2.0$ & 0.0756 & 47.4 & 2.05$\times$ & 87.5\% \\
+    \texttt{SDVG}      & $-2.5$ & 0.0754 & 46.4 & 2.09$\times$ & 88.9\% \\
     \midrule
-    \multicolumn{5}{l}{\textit{\texttt{SDVG}-hybrid ($k{=}3$, cascade, block~0 protected)}} \\
-    \texttt{SDVG}-hybrid ($\tau{=}{-}0.7$)     & 0.0772 & 51.6 & 1.88$\times$ & ---    \\
-    \texttt{SDVG}-hybrid ($\tau{=}{-}1.0$)     & 0.0764 & 49.5 & 1.96$\times$ & ---    \\
-    \texttt{SDVG}-hybrid ($\tau{=}{-}1.5$)     & 0.0759 & 48.2 & 2.01$\times$ & ---    \\
-    \texttt{SDVG}-hybrid ($\tau{=}{-}2.0$)     & 0.0751 & 46.1 & 2.11$\times$ & ---    \\
+    \texttt{SDVG}-hybrid & $-0.7$ & 0.0772 & 51.6 & 1.88$\times$ & --- \\
+    \texttt{SDVG}-hybrid & $-1.0$ & 0.0764 & 49.5 & 1.96$\times$ & --- \\
+    \texttt{SDVG}-hybrid & $-1.5$ & 0.0759 & 48.2 & 2.01$\times$ & --- \\
+    \texttt{SDVG}-hybrid & $-2.0$ & 0.0751 & 46.1 & 2.11$\times$ & --- \\
     \midrule
-    Draft-only                        & 0.0644 & 25.7 & 3.77$\times$ & ---    \\
+    Draft-only         & ---    & 0.0644 & 25.7 & 3.77$\times$ & ---    \\
+    \bottomrule
+  \end{tabular}
+
+  \vspace{7pt}
+  \setlength{\tabcolsep}{3.5pt}
+  \small
+  \begin{tabular}{llcccccccc}
+    \toprule
+    Method & $\tau$ & VQA\_T $\uparrow$ & IS $\downarrow$ & warp $\downarrow$
+           & action $\downarrow$ & flow $\downarrow$
+           & BLEU $\uparrow$ & detect $\uparrow$ & OCR $\downarrow$ \\
+    \midrule
+    Target-only        & ---    & 93.33 & 18.62 & 0.0066 & 45.18 & 4.99 & 21.66 & 78.09 & 13.99 \\
+    \midrule
+    \texttt{SDVG}      & $-0.7$ & 93.11 & 18.99 & 0.0085 & 45.38 & 5.16 & 21.92 & 77.85 & 5.10 \\
+    \texttt{SDVG}      & $-0.8$ & 93.09 & 18.91 & 0.0086 & 45.30 & 5.18 & 21.82 & 78.29 & 4.91 \\
+    \texttt{SDVG}      & $-0.9$ & 93.12 & 19.12 & 0.0087 & 45.28 & 5.18 & 21.87 & 78.12 & 5.71 \\
+    \texttt{SDVG}      & $-1.0$ & 93.08 & 19.17 & 0.0088 & 45.29 & 5.18 & 21.89 & 78.44 & 4.94 \\
+    \texttt{SDVG}      & $-1.5$ & 92.81 & 19.15 & 0.0090 & 45.28 & 5.31 & 21.74 & 78.54 & 5.44 \\
+    \texttt{SDVG}      & $-2.0$ & 93.04 & 19.20 & 0.0092 & 45.45 & 5.35 & 21.73 & 78.70 & 4.73 \\
+    \texttt{SDVG}      & $-2.5$ & 92.91 & 19.16 & 0.0093 & 45.42 & 5.35 & 21.74 & 77.99 & 5.33 \\
+    \midrule
+    \texttt{SDVG}-hybrid & $-0.7$ & 92.94 & 19.13 & 0.0089 & 45.49 & 5.39 & 21.87 & 78.19 & 5.87 \\
+    \texttt{SDVG}-hybrid & $-1.0$ & 92.94 & 19.01 & 0.0091 & 45.38 & 5.38 & 21.88 & 77.88 & 4.81 \\
+    \texttt{SDVG}-hybrid & $-1.5$ & 93.13 & 19.12 & 0.0092 & 45.47 & 5.37 & 21.86 & 77.90 & 4.09 \\
+    \texttt{SDVG}-hybrid & $-2.0$ & 92.98 & 19.08 & 0.0092 & 45.48 & 5.36 & 21.78 & 77.82 & 5.92 \\
+    \midrule
+    Draft-only         & ---    & 92.75 & 19.52 & 0.0102 & 46.95 & 5.90 & 21.00 & 72.57 & 48.19 \\
     \bottomrule
   \end{tabular}
 \end{table}
