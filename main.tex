@@ -731,6 +731,74 @@ between $0.9$ and $3.2$\,s while VisionReward moves by at most $0.0007$ in
 either direction, so the saving is essentially free at the conservative
 thresholds and only starts to cost a little at $\tau{=}{-}2.0$.
 
+\subsection{What the Router Actually Decides}
+\label{sec:routing-analysis}
+
+Every run logs each block's ImageReward score together with the decision it
+produced, so the routing policy can be studied directly rather than through
+the quality it ends up delivering. We analyse three 1003-prompt runs:
+\texttt{SDVG} at $\tau{=}{-}0.7$ and $\tau{=}{-}1.0$, and
+\texttt{SDVG}-hybrid at $\tau{=}{-}1.0$ with the cascade.
+
+\paragraph{Difficulty is a property of the prompt.}
+A block score splits into a prompt-level component and a within-prompt one.
+Across the three runs the prompt-level standard deviation is $0.94$ against
+$0.33$ within a prompt, so roughly $82\%$ of the variance in block scores
+is explained by \emph{which prompt} is being generated. The router is not
+sampling the video block by block; it is finding that some prompts draft
+well throughout and others do not.
+
+\paragraph{Acceptance decays along the video.}
+Acceptance falls monotonically with the block index in all three runs
+(Table~\ref{tab:acceptance}), losing $13$ points from block~1 to block~8 at
+$\tau{=}{-}0.7$ and $10$ at $\tau{=}{-}1.0$. Conditioned on its own
+generated context, the drafter drifts: the later a block sits in the video,
+the less often its draft survives.
+
+\begin{table}[t]
+  \caption{%
+    \textbf{Acceptance rate by block index.}
+    Each percentage is over the 1003 prompts of the run; block~0, which is
+    always force-rejected, does not appear here.
+  }
+  \label{tab:acceptance}
+  \centering
+  \setlength{\tabcolsep}{5pt}
+  \small
+  \begin{tabular}{lcccccccc}
+    \toprule
+    & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 \\
+    \midrule
+    \texttt{SDVG} ($\tau{=}{-}0.7$) & 89.4 & 87.6 & 85.4 & 83.0 & 81.3 & 78.7 & 76.0 & 76.6 \\
+    \texttt{SDVG} ($\tau{=}{-}1.0$) & 92.4 & 91.8 & 91.2 & 89.8 & 87.0 & 84.2 & 82.9 & 82.4 \\
+    \texttt{SDVG}-hybrid ($\tau{=}{-}1.0$) & 92.4 & 92.1 & 90.4 & 89.3 & 86.4 & 84.4 & 82.0 & 80.2 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Rejections come in runs.}
+Far from being independent draws, the decisions are strongly correlated
+with their predecessor. At $\tau{=}{-}0.7$ the unconditional rejection rate
+is $17.8\%$, but it is $5.9\%$ after an accepted block and $81.8\%$ after a
+rejected one---a factor of $14$, and $20$ to $22$ at $\tau{=}{-}1.0$ in
+both methods. A rejection is not a local accident; it marks the start of a
+stretch the drafter does not recover from on its own.
+
+\paragraph{The decisions are not close calls.}
+Rejected blocks score with a median of $-1.2$ to $-1.5$ while accepted ones
+sit at $+0.6$ to $+0.7$: the two populations are separated by roughly two
+reward units, and the threshold merely sits between them. This is the
+quantitative reason the four-frame proxy of Section~\ref{sec:hybrid}
+suffices---fewer than one block in ten lands in the band where the proxy is
+ambiguous, so most decisions are not marginal to begin with.
+
+\paragraph{Where the remaining error sits.}
+$65\%$ of prompts never trigger a rejection and average $+0.0823$
+VisionReward, while the $7\%$ that reject all eight blocks average
+$+0.0439$. Regenerating every block of a hard prompt does not make it an
+easy one, so the residual gap is a property of the prompt rather than of
+the routing policy.
+
 \section{Limitations}
 
 \textbf{Distributional bias.}
