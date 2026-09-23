@@ -15,26 +15,23 @@ pdflatex main.tex && bibtex main && pdflatex main.tex && pdflatex main.tex
 
 ### Generate figures
 ```bash
-python gen_figures.py      # Main evaluation plots (VisionReward comparison, routing analysis, quality-speed tradeoff)
-python gen_overview.py     # Pipeline architecture diagram
+python gen_teaser.py          # Figure 1, from the frames in figures/teaser_frames/
+python gen_pareto.py          # Figure 3, quality--speed curve (values transcribed from Table 1)
+python gen_pipeline_svg.py    # Figure 2, compiles figures/pipeline.tex (TikZ) to PDF/SVG/PNG
 ```
 
-Figures are written to `figures/` as both PDF and PNG.
+Figures are written to `figures/`.
 
 ## Architecture
 
 ### Figure generation scripts
-- `gen_figures.py` — Loads 3 JSON eval files + 1 log file from `/rscratch/yuezhouhu/` (cluster paths), computes VisionReward distributions, acceptance rates, and quality-speed Pareto points.
-- `gen_overview.py` — Pure matplotlib drawing of the inference pipeline (no data loading).
+- `gen_teaser.py` — Assembles the teaser grid from pre-extracted frames; no data loading.
+- `gen_pareto.py` — Plots VisionReward against speedup for the two threshold sweeps.
+- `gen_pipeline_svg.py` — Thin build wrapper: pdflatex + dvisvgm + pdftoppm over `figures/pipeline.tex`.
 
-### Data dependencies
-The scripts reference hardcoded cluster paths:
-```
-/rscratch/yuezhouhu/VisionReward/eval_draft_only_200.json
-/rscratch/yuezhouhu/VisionReward/eval_reward_200.json
-/rscratch/yuezhouhu/VisionReward/eval_target_only_200.json
-/rscratch/yuezhouhu/realtime-video/logs/reward_200.log
-```
+Figure data is transcribed from the evaluation reports rather than read from
+them at build time; the Jupyter-style eval JSONs those reports came from live
+under `/rscratch/yuezhouhu/` and are not needed to regenerate a figure.
 
 ### Algorithm (SDVG)
 For each video block (9 blocks total at 832×480):
