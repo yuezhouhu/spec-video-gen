@@ -575,38 +575,34 @@ Section~\ref{sec:ablation} separates the two contributions.
 \subsection{Ablation Studies}
 \label{sec:ablation}
 
-We ablate both methods. For \texttt{SDVG} we vary the scoring strategy
-and the routing signal (Table~\ref{tab:ablation}), and for
-\texttt{SDVG}-hybrid we isolate the two mechanisms it adds, at a fixed
-$\tau{=}{-}1.0$ (Table~\ref{tab:hybrid}). All runs use the same
-force-reject-block-0 policy, so the comparisons stay controlled.
+We ablate both methods. Table~\ref{tab:ablation} varies the two design
+choices behind \texttt{SDVG}---how a block is scored and what signal the
+router acts on---and Table~\ref{tab:hybrid} takes \texttt{SDVG}-hybrid
+apart one factor at a time. Every run keeps the force-reject-block-0
+policy, so the comparisons stay controlled.
 
 \paragraph{Reward-guided vs.\ random routing.}
-To verify that the ImageReward signal is load-bearing, we replace the
-reward router with random accept/reject decisions (at a matched overall
-accept rate).
-Random routing yields VisionReward 0.0706, a sharp drop from
-the reward-guided \texttt{SDVG} (0.0773 at $\tau{=}{-}0.7$) and below even
-the force-reject baseline---accepting every draft bar block~0, with no
-scoring at all---which reaches 0.0757 at ${2.21\times}$ (Table~\ref{tab:ablation}).
-Without a quality signal, the router accepts artifact-heavy blocks and
-rejects clean ones with equal probability, negating the benefit of
-selective regeneration.
-The force-reject baseline also bounds what verification can buy: it is
-the fastest setting that keeps block~0 target-generated, and every scored
-configuration has to earn its extra scoring cost back in quality.
+To check that the ImageReward signal is load-bearing, we replace the
+reward router with random accept/reject decisions at a matched acceptance
+rate. VisionReward falls to 0.0706, below every other row in the table and
+$0.0067$ under the reward-guided \texttt{SDVG} at $\tau{=}{-}0.7$: without
+a quality signal the router admits artifact-heavy blocks and turns away
+clean ones at the same rate, which cancels the benefit of selective
+regeneration.
+Two rows bracket what the router is worth. Keeping the force-reject policy
+and nothing else---every other draft accepted, no scoring---recovers 0.0757
+at ${2.21\times}$ and is the fastest setting that keeps block~0
+target-generated; the same random router on top of that policy reaches
+0.0771, so block~0 alone accounts for most of the gap between random
+routing and the full method.
 
 \paragraph{Min-frame vs.\ average-frame scoring.}
-Our default \texttt{SDVG} uses min-frame aggregation (Eq.~\ref{eq:minscore}),
-which flags blocks where even a single frame is degraded.
-Replacing it with average-frame scoring consistently underperforms:
-at comparable accept rates, the avg-frame variants achieve lower
-VisionReward (e.g., 0.0755 at 78.4\% acceptance vs.\ 0.0773 at 73.1\%
-for min-frame $\tau{=}{-}0.7$).
-This confirms that averaging masks per-frame artifacts---a single
-corrupted frame among $F{=}3$ produces visible temporal flickering that
-the mean score fails to catch, leading the router to accept low-quality
-blocks.
+Our default \texttt{SDVG} scores a block by its worst frame
+(Eq.~\ref{eq:minscore}), so it flags the block as soon as one frame is
+degraded. Average-frame variants never close the gap at comparable
+acceptance rates---0.0755 at 78.4\% against 0.0773 at 73.1\% for min-frame
+$\tau{=}{-}0.7$---because a single corrupted frame among the $F$ the block
+decodes carries visible temporal flickering that the mean absorbs.
 
 \begin{table}[t]
   \caption{%
@@ -672,27 +668,27 @@ its own.
     Target-only & --- & 0.0788 & 97.0 & 1.00$\times$ & 100.0\% \\
     \midrule
     \textbf{\texttt{SDVG}-hybrid ($k{=}3$, ours)}
-      & on  & \textbf{0.0764} & \textbf{49.5} & \textbf{1.96$\times$} & \textbf{96.9\%} \\
+      & $\checkmark$ & \textbf{0.0764} & \textbf{49.5} & \textbf{1.96$\times$} & \textbf{96.9\%} \\
     \midrule
     \multicolumn{6}{l}{\textit{Stitching depth ($\tau{=}{-}0.7$, block~0 protected)}} \\
-    $k{=}2$ & off & 0.0756 & 56.2 & 1.73$\times$ & 95.9\% \\
-    $k{=}3$ & off & \textbf{0.0766} & 54.3 & 1.79$\times$ & \textbf{97.2\%} \\
-    $k{=}4$ & off & 0.0752 & 52.5 & 1.85$\times$ & 95.5\% \\
+    $k{=}2$ & $\times$ & 0.0756 & 56.2 & 1.73$\times$ & 95.9\% \\
+    $k{=}3$ & $\times$ & \textbf{0.0766} & 54.3 & 1.79$\times$ & \textbf{97.2\%} \\
+    $k{=}4$ & $\times$ & 0.0752 & 52.5 & 1.85$\times$ & 95.5\% \\
     \midrule
     \multicolumn{6}{l}{\textit{Stitching block~0 as well ($\tau{=}{-}0.7$)}} \\
-    $k{=}2$ & off & 0.0688 & 58.9 & 1.65$\times$ & 87.3\% \\
-    $k{=}3$ & off & 0.0677 & 51.6 & 1.88$\times$ & 85.9\% \\
-    $k{=}4$ & off & 0.0646 & 46.7 & 2.08$\times$ & 82.0\% \\
+    $k{=}2$ & $\times$ & 0.0688 & 58.9 & 1.65$\times$ & 87.3\% \\
+    $k{=}3$ & $\times$ & 0.0677 & 51.6 & 1.88$\times$ & 85.9\% \\
+    $k{=}4$ & $\times$ & 0.0646 & 46.7 & 2.08$\times$ & 82.0\% \\
     \midrule
     \multicolumn{6}{l}{\textit{Varying the threshold ($k{=}3$, block~0 protected)}} \\
-    $\tau{=}{-}0.7$ & off & 0.0766 & 54.3 & 1.79$\times$ & 97.2\% \\
-    $\tau{=}{-}0.7$ & on  & 0.0772 & 51.6 & 1.88$\times$ & 98.0\% \\
-    $\tau{=}{-}1.0$ & off & 0.0763 & 51.7 & 1.88$\times$ & 96.9\% \\
-    $\tau{=}{-}1.0$ & on  & 0.0764 & 49.5 & 1.96$\times$ & 96.9\% \\
-    $\tau{=}{-}1.5$ & off & 0.0760 & 49.1 & 1.97$\times$ & 96.4\% \\
-    $\tau{=}{-}1.5$ & on  & 0.0759 & 48.2 & 2.01$\times$ & 96.3\% \\
-    $\tau{=}{-}2.0$ & off & 0.0758 & 49.3 & 1.97$\times$ & 96.2\% \\
-    $\tau{=}{-}2.0$ & on  & 0.0751 & 46.1 & 2.11$\times$ & 95.3\% \\
+    $\tau{=}{-}0.7$ & $\times$ & 0.0766 & 54.3 & 1.79$\times$ & 97.2\% \\
+    $\tau{=}{-}0.7$ & $\checkmark$ & 0.0772 & 51.6 & 1.88$\times$ & 98.0\% \\
+    $\tau{=}{-}1.0$ & $\times$ & 0.0763 & 51.7 & 1.88$\times$ & 96.9\% \\
+    $\tau{=}{-}1.0$ & $\checkmark$ & 0.0764 & 49.5 & 1.96$\times$ & 96.9\% \\
+    $\tau{=}{-}1.5$ & $\times$ & 0.0760 & 49.1 & 1.97$\times$ & 96.4\% \\
+    $\tau{=}{-}1.5$ & $\checkmark$ & 0.0759 & 48.2 & 2.01$\times$ & 96.3\% \\
+    $\tau{=}{-}2.0$ & $\times$ & 0.0758 & 49.3 & 1.97$\times$ & 96.2\% \\
+    $\tau{=}{-}2.0$ & $\checkmark$ & 0.0751 & 46.1 & 2.11$\times$ & 95.3\% \\
     \bottomrule
   \end{tabular}
 \end{table}
