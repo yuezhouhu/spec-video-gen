@@ -467,9 +467,7 @@ two boundary baselines.
   }
   \label{tab:main}
   \centering
-  \setlength{\tabcolsep}{9pt}
-  % \small
-  \begin{tabular}{llcccccc}
+  \begin{tabular*}{0.97\linewidth}{@{\extracolsep{\fill}}llcccccc}
     \toprule
     Method & $\tau$ & VR $\uparrow$ & Ret.\ (\%) & Time (s) & Speedup & Accept \\
     \midrule
@@ -490,12 +488,11 @@ two boundary baselines.
     \midrule
     Draft-only         & ---    & 0.0644 & 81.73 & 25.7 & 3.77$\times$ & ---    \\
     \bottomrule
-  \end{tabular}
+  \end{tabular*}
 
   \vspace{7pt}
-  \setlength{\tabcolsep}{3.5pt}
   \small
-  \begin{tabular}{llccccccc}
+  \begin{tabular*}{0.97\linewidth}{@{\extracolsep{\fill}}llccccccc}
     \toprule
     Method & $\tau$ & VQA\_T $\uparrow$ & IS $\downarrow$ & warp $\downarrow$
            & action $\downarrow$ & flow $\downarrow$
@@ -518,7 +515,7 @@ two boundary baselines.
     \midrule
     Draft-only         & ---    & 92.75 & 19.52 & 0.0102 & 46.95 & 5.90 & 21.00 & 72.57 \\
     \bottomrule
-  \end{tabular}
+  \end{tabular*}
 \end{table}
 
 \paragraph{Quality--time tradeoff.}
