@@ -1,37 +1,12 @@
-\documentclass{article}
+\documentclass{article} % For LaTeX2e
+\usepackage{iclr2027_conference,times}
+
+% Uncomment for the camera-ready version, but NOT for submission.
+% \iclrfinalcopy
 
 % if you need to pass options to natbib, use, e.g.:
 %     \PassOptionsToPackage{numbers, compress}{natbib}
-% before loading neurips_2026
-\PassOptionsToPackage{numbers, compress}{natbib}
-
-% The authors should use one of these tracks.
-% Before accepting by the NeurIPS conference, select one of the options below.
-% 0. "default" for submission
-% \usepackage{neurips_2026}
-% the "default" option is equal to the "main" option, which is used for the Main Track with double-blind reviewing.
-% 1. "main" option is used for the Main Track
-%  \usepackage[main]{neurips_2026}
-% 2. "position" option is used for the Position Paper Track
-%  \usepackage[position]{neurips_2026}
-% 3. "eandd" option is used for the Evaluations & Datasets Track
- % \usepackage[eandd]{neurips_2026}
-% 4. "creativeai" option is used for the Creative AI Track
-%  \usepackage[creativeai]{neurips_2026}
-% 5. "sglblindworkshop" option is used for the Workshop with single-blind reviewing
- % \usepackage[sglblindworkshop]{neurips_2026}
-% 6. "dblblindworkshop" option is used for the Workshop with double-blind reviewing
-%  \usepackage[dblblindworkshop]{neurips_2026}
-
-% After being accepted, the authors should add "final" behind the track to compile a camera-ready version.
-% 1. Main Track
- % \usepackage[main, final]{neurips_2026}
-
-% "preprint" option is used for arXiv or other preprint submissions
- \usepackage[preprint]{neurips_2026}
-
-% to avoid loading the natbib package, add option nonatbib:
-%    \usepackage[nonatbib]{neurips_2026}
+% before loading iclr2027_conference
 
 \usepackage[utf8]{inputenc} % allow utf-8 input
 \usepackage[T1]{fontenc}    % use 8-bit T1 fonts
@@ -85,15 +60,18 @@
 % authors names on the first line, and the last on the second line, try using
 % \AND instead of \And before the third author name.
 
-\author{%
-  Yuezhou Hu$^{*}$ \\
-  University of California, Berkeley \\
-  \texttt{yuezhouhu@berkeley.edu} \\
-  \And
-  Jintao Zhang$^{*\dag}$ \\
-  University of California, Berkeley \\
-  \texttt{jintaozhang@berkeley.edu} \\
-}
+% Authors are hidden automatically while \iclrfinalcopy is commented out.
+% Restore this block for the camera-ready version.
+% \author{%
+%   Yuezhou Hu$^{*}$ \\
+%   University of California, Berkeley \\
+%   \texttt{yuezhouhu@berkeley.edu} \\
+%   \And
+%   Jintao Zhang$^{*\dag}$ \\
+%   University of California, Berkeley \\
+%   \texttt{jintaozhang@berkeley.edu} \\
+% }
+\author{}
 
 
 
@@ -103,11 +81,11 @@
 
 \maketitle
 
-\def\customfootnotetext#1#2{{%
-  \let\thefootnote\relax
-  \footnotetext[#1]{#2}}}
-
-\customfootnotetext{1}{\textsuperscript{*}Equal Contribution.~~~\textsuperscript{\dag}Corresponding Author.}
+% \def\customfootnotetext#1#2{{%
+%   \let\thefootnote\relax
+%   \footnotetext[#1]{#2}}}
+%
+% \customfootnotetext{1}{\textsuperscript{*}Equal Contribution.~~~\textsuperscript{\dag}Corresponding Author.}
 
 \begin{abstract}
 Autoregressive video diffusion is emerging as a promising paradigm for
@@ -645,16 +623,44 @@ $2.09\times$ speedup while remaining well above draft-only quality.
 model with a drafter-target pair, opening the door to reward-guided
 inference-time compute allocation for video generation.
 
-% \begin{ack}
-% Use unnumbered first level headings for the acknowledgments. All acknowledgments
-% go at the end of the paper before the list of references. Moreover, you are required to declare
-% funding (financial activities supporting the submitted work) and competing interests (related financial activities outside the submitted work).
-% More information about this disclosure can be found at: \url{https://neurips.cc/Conferences/2026/PaperInformation/FundingDisclosure}.
-%
-% Do {\bf not} include this section in the anonymized submission, only in the final paper. You can use the \texttt{ack} environment provided in the style file to automatically hide this section in the anonymized submission.
-% \end{ack}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection*{AI use statement}
 
-\bibliographystyle{abbrvnat}
+(This section is \textbf{required} and does not count toward the page limit.)
+
+% TODO: replace with the actual disclosure before submission.
+In this work, we used generative AI tools for [tasks with required disclosure].
+We have not used generative AI tools for [other tasks with required disclosure],
+and [the rest of the required disclosure tasks] are not applicable to this work.
+Additionally, we used generative AI tools for [tasks with recommended
+disclosure]. We have reviewed all AI-assisted work. [Elaborate. For example, ``we
+checked LLM-generated research ideas for potential plagiarism through a manual
+literature survey'', ``LLM-generated code was verified and tested for correctness
+by 2 authors'', etc.]. We take responsibility for the final content of this work,
+including text, claims or artifacts produced with the aid of generative AI.
+
+\subsection*{Ethics statement}
+
+(This section is \textbf{recommended} and does not count toward the page limit.)
+
+% TODO: replace with the actual ethics statement before submission.
+[Add a paragraph addressing any potential concerns raised by this work, if
+applicable.]
+
+\subsection*{Reproducibility statement}
+
+(This section is \textbf{recommended} and does not count toward the page limit.)
+
+% TODO: replace with the actual reproducibility statement before submission.
+[Add a paragraph referencing the parts of the paper, appendix, and supplemental
+materials that support reproduction of the results.]
+
+% Acknowledgments go at the end of the paper before the references, using an
+% unnumbered third level heading. Uncomment and complete for the camera-ready
+% version.
+% \subsubsection*{Acknowledgments}
+
+\bibliographystyle{iclr2027_conference}
 \bibliography{references}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -667,9 +673,6 @@ inference-time compute allocation for video generation.
 % page limit for appendices, but reviewers are not required to read them.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% \newpage
-% \input{checklist.tex}
 
 
 \end{document}

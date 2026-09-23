@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is the paper repository for **"Reward-Guided Speculative Video Generation"** (RSVG), an arXiv preprint. The project applies speculative decoding to video generation: a 1.3B drafter proposes video blocks, a reward model scores them, and a fixed-threshold router decides whether to accept the draft or regenerate with the 14B target model.
+This is the paper repository for **"Speculative Decoding for Autoregressive Video Generation"** (SDVG), prepared with the ICLR 2027 template. The project applies speculative decoding to video generation: a 1.3B drafter proposes video blocks, a reward model scores them, and a fixed-threshold router decides whether to accept the draft or regenerate with the 14B target model.
 
 ## Commands
 
@@ -36,7 +36,7 @@ The scripts reference hardcoded cluster paths:
 /rscratch/yuezhouhu/realtime-video/logs/reward_200.log
 ```
 
-### Algorithm (RSVG)
+### Algorithm (SDVG)
 For each video block (9 blocks total at 832×480):
 1. Run drafter (4 denoising steps) to get a candidate block
 2. **Block 0**: always force-regenerate with target (ensures scene composition)
@@ -49,5 +49,20 @@ Key results: 1.59× speedup vs target-only, 98.1% quality retention (VisionRewar
 ### Paper structure
 - `main.tex` — Main paper (introduction, background, method, experiments)
 - `references.bib` — Bibliography
-- `checklist.tex` — NeurIPS submission checklist
-- `neurips_2026.sty` — NeurIPS 2026 template style file
+- `iclr2027_conference.sty` / `.bst` — ICLR 2027 template style and bibliography style
+- `fancyhdr.sty` / `natbib.sty` — Support files bundled with the ICLR template (pinned to the template's versions)
+
+### ICLR submission details
+- `main.tex` uses `\usepackage{iclr2027_conference,times}`. The document currently compiles in
+  **double-blind submission mode**: the header reads "Under review as a conference paper at ICLR
+  2027", authors render as "Anonymous authors / Paper under double-blind review", and a line-number
+  ruler appears in the left margin.
+- Author names are commented out in the `\author{}` block. For the camera-ready version, uncomment
+  `\iclrfinalcopy`, restore the author block and the equal-contribution footnote, and uncomment the
+  Acknowledgments heading. Do **not** enable `\iclrfinalcopy` for submission.
+- The AI use statement (required), Ethics statement, and Reproducibility statement
+  (both recommended) sit between the Conclusion and the bibliography, and do not count toward the
+  page limit. **Their bodies are still placeholder text** — search for `% TODO` in `main.tex`.
+- Page limit: 9 pages of main text, excluding references and the statements above.
+- Bibliography entry types must be defined in `iclr2027_conference.bst`; `@software` is not, so
+  software/tool citations use `@misc`.

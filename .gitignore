@@ -1,0 +1,27 @@
+# LaTeX build artifacts
+*.aux
+*.bbl
+*.blg
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.spl
+*.bcf
+*.run.xml
+
+# Compiled paper. Root-only on purpose: figures/*.pdf and figures/*.png are
+# sources and must stay tracked.
+/main.pdf
+
+# Python
+__pycache__/
+*.pyc
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
