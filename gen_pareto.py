@@ -14,8 +14,7 @@ from matplotlib.ticker import FixedFormatter, FixedLocator, NullFormatter
 # out on purpose: at 3.77x it would stretch the axis and flatten the region
 # where the two sweeps actually differ.
 TARGET = (1.00, 0.0788)
-SDVG = [(1.59, 0.0773), (1.66, 0.0769), (1.66, 0.0771), (1.69, 0.0764),
-        (1.88, 0.0757), (2.05, 0.0756), (2.09, 0.0754)]
+SDVG = [(1.59, 0.0773), (1.69, 0.0764), (1.88, 0.0757), (2.05, 0.0756)]
 HYBRID = [(1.88, 0.0772), (1.96, 0.0764), (2.01, 0.0759), (2.11, 0.0751)]
 
 BLUE, ORANGE, DEEP = '#3c78b4', '#e8853c', '#c2601a'

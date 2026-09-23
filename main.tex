@@ -474,12 +474,9 @@ two boundary baselines.
     Target-only        & ---    & 0.0788 & 100.0 & 97.0 & 1.00$\times$ & ---    \\
     \midrule
     \texttt{SDVG}      & $-0.7$ & 0.0773 & 98.10 & 60.9 & 1.59$\times$ & 73.1\% \\
-    \texttt{SDVG}      & $-0.8$ & 0.0769 & 97.59 & 58.6 & 1.66$\times$ & 74.9\% \\
-    \texttt{SDVG}      & $-0.9$ & 0.0771 & 97.84 & 58.3 & 1.66$\times$ & 76.4\% \\
     \texttt{SDVG}      & $-1.0$ & 0.0764 & 96.95 & 57.2 & 1.69$\times$ & 78.0\% \\
     \texttt{SDVG}      & $-1.5$ & 0.0757 & 96.07 & 51.6 & 1.88$\times$ & 83.4\% \\
     \texttt{SDVG}      & $-2.0$ & 0.0756 & 95.94 & 47.4 & 2.05$\times$ & 87.5\% \\
-    \texttt{SDVG}      & $-2.5$ & 0.0754 & 95.69 & 46.4 & 2.09$\times$ & 88.9\% \\
     \midrule
     \texttt{SDVG}-hybrid & $-0.7$ & 0.0772 & 97.97 & 51.6 & 1.88$\times$ & 72.8\% \\
     \texttt{SDVG}-hybrid & $-1.0$ & 0.0764 & 96.95 & 49.5 & 1.96$\times$ & 77.5\% \\
@@ -501,12 +498,9 @@ two boundary baselines.
     Target-only        & ---    & 93.33 & 18.62 & 0.0066 & 45.18 & 4.99 & 21.66 & 78.09 \\
     \midrule
     \texttt{SDVG}      & $-0.7$ & 93.11 & 18.99 & 0.0085 & 45.38 & 5.16 & 21.92 & 77.85 \\
-    \texttt{SDVG}      & $-0.8$ & 93.09 & 18.91 & 0.0086 & 45.30 & 5.18 & 21.82 & 78.29 \\
-    \texttt{SDVG}      & $-0.9$ & 93.12 & 19.12 & 0.0087 & 45.28 & 5.18 & 21.87 & 78.12 \\
     \texttt{SDVG}      & $-1.0$ & 93.08 & 19.17 & 0.0088 & 45.29 & 5.18 & 21.89 & 78.44 \\
     \texttt{SDVG}      & $-1.5$ & 92.81 & 19.15 & 0.0090 & 45.28 & 5.31 & 21.74 & 78.54 \\
     \texttt{SDVG}      & $-2.0$ & 93.04 & 19.20 & 0.0092 & 45.45 & 5.35 & 21.73 & 78.70 \\
-    \texttt{SDVG}      & $-2.5$ & 92.91 & 19.16 & 0.0093 & 45.42 & 5.35 & 21.74 & 77.99 \\
     \midrule
     \texttt{SDVG}-hybrid & $-0.7$ & 92.94 & 19.13 & 0.0089 & 45.49 & 5.39 & 21.87 & 78.19 \\
     \texttt{SDVG}-hybrid & $-1.0$ & 92.94 & 19.01 & 0.0091 & 45.38 & 5.38 & 21.88 & 77.88 \\
@@ -519,7 +513,7 @@ two boundary baselines.
 \end{table}
 
 \paragraph{Quality--time tradeoff.}
-By sweeping the threshold $\tau$ from $-0.7$ to $-2.5$, \texttt{SDVG} traces a
+By sweeping the threshold $\tau$ from $-0.7$ to $-2.0$, \texttt{SDVG} traces a
 smooth Pareto frontier between the two baselines
 (Figure~\ref{fig:pareto}).
 At the conservative end ($\tau{=}{-}0.7$), \texttt{SDVG} retains
@@ -528,9 +522,9 @@ with a \textbf{1.59$\times$} speedup.
 As the threshold relaxes, inference time continues to drop:
 $\tau{=}{-}1.0$ pushes the speedup to \textbf{1.69$\times$} while
 preserving 96.95\% of target quality.
-At the aggressive end ($\tau{=}{-}2.5$), \texttt{SDVG} reaches
-\textbf{2.09$\times$} speedup at 95.69\% quality retention---still
-substantially above draft-only (0.0754 vs.\ 0.0644, a $+17.1\%$ gap).
+At the aggressive end ($\tau{=}{-}2.0$), \texttt{SDVG} reaches
+\textbf{2.05$\times$} speedup at 95.94\% quality retention---still
+substantially above draft-only (0.0756 vs.\ 0.0644, a $+17.4\%$ gap).
 The diminishing returns beyond $\tau{=}{-}1.5$ suggest that most
 quality-critical blocks already have ImageReward scores above $-1.5$;
 further relaxation buys little additional speed.
