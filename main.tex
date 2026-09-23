@@ -660,14 +660,16 @@ its own.
   }
   \label{tab:hybrid}
   \centering
-  \setlength{\tabcolsep}{10pt}
+  \setlength{\tabcolsep}{6pt}
   \begin{tabular}{lccccc}
     \toprule
     Method & Cascade & VR $\uparrow$ & Time (s) & Speedup & Retention \\
     \midrule
     Target-only & --- & 0.0788 & 97.0 & 1.00$\times$ & 100.0\% \\
     \midrule
-    \textbf{\texttt{SDVG}-hybrid ($k{=}3$, ours)}
+    \textbf{\texttt{SDVG}-hybrid ($k{=}3$, $\tau{=}{-}0.7$)}
+      & $\checkmark$ & \textbf{0.0772} & \textbf{51.6} & \textbf{1.88$\times$} & \textbf{98.0\%} \\
+    \textbf{\texttt{SDVG}-hybrid ($k{=}3$, $\tau{=}{-}1.0$, ours)}
       & $\checkmark$ & \textbf{0.0764} & \textbf{49.5} & \textbf{1.96$\times$} & \textbf{96.9\%} \\
     \midrule
     \multicolumn{6}{l}{\textit{Stitching depth ($\tau{=}{-}0.7$, block~0 protected)}} \\
