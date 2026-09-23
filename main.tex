@@ -353,7 +353,10 @@ $\Target^{\,S-k}$ the remaining target steps, and $\mathbf{z}_b$ the
 shared initial noise.
 The stitched steps add no computation. The draft forward passes were
 already paid for during scoring, and the target keeps its final
-low-timestep steps, where its refinement matters most. Importantly, since block 0 serve as an ``anchor'' during generation, which fixes the scene that every later block attends to, it stays entirely target-generated. Only later rejected blocks are stitched when rejection decides that the target's
+low-timestep steps, where its refinement matters most.
+Since block 0 serves as the anchor that fixes the scene every later block
+attends to, it stays entirely target-generated.
+Only later rejected blocks are stitched when rejection decides that the target's
 output is needed.
 
 \textbf{On-demand cascade routing.}
