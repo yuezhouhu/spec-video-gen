@@ -387,14 +387,11 @@ this saving further.
 \label{sec:experiments}
 
 This section provides empirical results of our proposed method.
-We first introduce the models and settings
-(Section~\ref{sec:setup}), followed by quality--speed trade-off of both \texttt{SDVG} and \texttt{SDVG}-hybrid (Sections~\ref{sec:main-results}
-and~\ref{sec:hybrid-results}) and alternative design choices (Section~\ref{sec:ablation}).
-% TODO: the paragraph should close on what the last subsection actually does --
-% currently Section~\ref{sec:evalcrafter} (cross-benchmark check with
-% EvalCrafter), not a rejection-pattern analysis.
-We finish this part by analysing
-rejection patterns of both methods, demonstrating that \texttt{SDVG} can accelerate autoregressive video generation without giving up its quality.
+We first introduce the models and settings (Section~\ref{sec:setup}),
+then present the quality--speed trade-off of both \texttt{SDVG} and
+\texttt{SDVG}-hybrid (Section~\ref{sec:main-results}), and close with
+ablations of both methods that isolate which design choices carry the
+gains (Section~\ref{sec:ablation}).
 
 \subsection{Experimental Setup}
 \label{sec:setup}
@@ -450,9 +447,8 @@ Table~\ref{tab:main} reports the two sweeps we compare---\texttt{SDVG} with
 its min-frame threshold varying, and \texttt{SDVG}-hybrid at the matched
 thresholds---against the two boundary baselines, and
 Figure~\ref{fig:pareto} plots the same numbers against speedup.
-The table's lower panel adds the EvalCrafter metrics for these settings,
-which Section~\ref{sec:evalcrafter} aggregates into the four dimension
-scores.
+The table's lower panel adds EvalCrafter's raw metrics for the same
+settings.
 
 \begin{table}[t]
   \caption{%
@@ -558,7 +554,7 @@ The advantage narrows as both sweeps approach $2\times$: the aggressive
 \texttt{SDVG} thresholds reach the same region, and the hybrid's
 $\tau{=}{-}2.0$ point buys its last $0.06\times$ by slipping to $95.3\%$
 retention.
-Section~\ref{sec:hybrid-results} separates the two contributions.
+Section~\ref{sec:ablation} separates the two contributions.
 
 \begin{figure}[t]
   \centering
@@ -579,12 +575,11 @@ Section~\ref{sec:hybrid-results} separates the two contributions.
 \subsection{Ablation Studies}
 \label{sec:ablation}
 
-We ablate the two key design choices in \texttt{SDVG}---the scoring strategy and
-the routing signal---to isolate their contributions.
-Table~\ref{tab:ablation} reports results on 1003 MovieGenVideoBench
-prompts.
-All ablations use the same force-reject-block-0 policy and fixed
-thresholds for a controlled comparison.
+We ablate both methods. For \texttt{SDVG} we vary the scoring strategy
+and the routing signal (Table~\ref{tab:ablation}), and for
+\texttt{SDVG}-hybrid we isolate the two mechanisms it adds, at a fixed
+$\tau{=}{-}1.0$ (Table~\ref{tab:hybrid}). All runs use the same
+force-reject-block-0 policy, so the comparisons stay controlled.
 
 \paragraph{Reward-guided vs.\ random routing.}
 To verify that the ImageReward signal is load-bearing, we replace the
@@ -649,12 +644,10 @@ blocks.
   \end{tabular}
 \end{table}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Where the Hybrid Gains Come From}
-\label{sec:hybrid-results}
-
-Table~\ref{tab:hybrid} isolates the two mechanisms of
-\texttt{SDVG}-hybrid, both measured at $\tau{=}{-}1.0$.
+\paragraph{What the hybrid buys.}
+The two mechanisms \texttt{SDVG}-hybrid adds are ablated separately at
+$\tau{=}{-}1.0$, starting from the same forced block~0
+(Table~\ref{tab:hybrid}).
 
 \begin{table}[t]
   \caption{%
@@ -722,72 +715,6 @@ ${1.96\times}$) at unchanged VisionReward and retention.
 The band narrows as the threshold loosens---from $11.5\%$ of blocks at
 $\tau{=}{-}0.7$ to $3.6\%$ at $\tau{=}{-}2.0$---so the saving scales with
 how conservative the operating point is.
-
-\subsection{Cross-Benchmark Check with EvalCrafter}
-\label{sec:evalcrafter}
-
-VisionReward is itself a learned reward model, so we re-score the same
-1003 videos with EvalCrafter
-\citep{liu2024evalcrafterbenchmarkingevaluatinglarge}, an independent
-benchmark that aggregates objective metrics---aesthetic and technical
-quality, CLIP-based alignment and temporal consistency, optical-flow
-motion statistics, and object, action and OCR detection---into four
-dimensions plus their total (Table~\ref{tab:evalcrafter}).
-
-\begin{table}[t]
-  \caption{%
-    \textbf{EvalCrafter scores for the same 1003 videos} (higher is
-    better).
-    The four dimensions are not on a common scale---text--video alignment
-    is reported over a much wider range---so the total is dominated by
-    it.
-    Values are comparable within this table only; see the caveats in the
-    text.
-  }
-  \label{tab:evalcrafter}
-  \centering
-  \setlength{\tabcolsep}{7pt}
-  \small
-  \begin{tabular}{lccccc}
-    \toprule
-    Method & Visual & Align. & Motion & Temporal & Total \\
-    \midrule
-    Target-only & 69.37 & 177.74 & 53.84 & 61.14 & 362 \\
-    \midrule
-    \texttt{SDVG} ($\tau{=}{-}0.7$) & 69.34 & 170.59 & 53.46 & 60.03 & 353 \\
-    \texttt{SDVG} ($\tau{=}{-}1.0$) & 69.31 & 174.65 & 53.46 & 59.87 & 357 \\
-    \texttt{SDVG} ($\tau{=}{-}1.5$) & 69.27 & 175.42 & 53.30 & 59.70 & 358 \\
-    \texttt{SDVG} ($\tau{=}{-}2.5$) & 69.27 & 173.15 & 53.26 & 59.55 & 355 \\
-    \midrule
-    \texttt{SDVG}-hybrid ($k{=}3$, $\tau{=}{-}1.0$) & 69.27 & 173.77 & 53.29 & 59.67 & 356 \\
-    \texttt{SDVG}-hybrid ($k{=}3$, $\tau{=}{-}1.0$, cascade) & 69.29 & 170.94 & 53.28 & 59.68 & 353 \\
-    \midrule
-    Draft-only & 69.45 & 166.96 & 52.83 & 59.16 & 348 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
-\paragraph{What moves and what does not.}
-The perceptual dimensions barely move: visual quality stays within 0.3
-points and motion quality within 1.0 point across every setting we ran,
-draft-only and the aggressive thresholds included.
-Routing changes \emph{which} blocks are generated by which model far less
-than it changes the scores of the reward models that judge them, and the
-accelerated settings inherit the target's perceptual quality rather than
-drifting toward the drafter's.
-The spread that remains sits in text--video alignment, and it follows the
-same ordering VisionReward gives: draft-only ranks last, and both
-\texttt{SDVG} and \texttt{SDVG}-hybrid sit between draft-only and
-target-only.
-
-\paragraph{Caveats.}
-These values are not comparable to published EvalCrafter leaderboards.
-The celebrity-identity metric does not apply to our prompts and is
-excluded, so the aggregation renormalizes its alignment weights, and the
-OCR metric could be computed for only a small subset of videos per
-setting.
-We therefore read this table as a within-run comparison of our own
-settings rather than as an absolute ranking.
 
 \section{Limitations}
 
