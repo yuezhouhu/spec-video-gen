@@ -20,7 +20,6 @@ from matplotlib.ticker import FixedFormatter, FixedLocator, NullLocator
 # out on purpose: at 3.77x it would stretch the axis and flatten the region
 # where the two sweeps actually differ.
 TARGET = (1.00, 0.0788)
-DRAFT = (3.77, 0.0644)
 SDVG = [(1.59, 0.0773), (1.69, 0.0764), (1.88, 0.0757), (2.05, 0.0756)]
 HYBRID = [(1.88, 0.0772), (1.96, 0.0764), (2.01, 0.0759), (2.11, 0.0751)]
 THRESHOLDS = [-0.7, -1.0, -1.5, -2.0]
@@ -118,14 +117,6 @@ def main():
         frameon=False, fontsize=10.5, handlelength=2.1,
         handletextpad=0.65, columnspacing=2.1, borderaxespad=0,
     )
-    ax.text(1, 1.125, r'Labels: $\tau$', transform=ax.transAxes,
-            ha='right', va='center', fontsize=9.5, color=MUTED)
-    fig.text(
-        0.175, 0.035,
-        rf'Log-scale speedup. Draft-only off-scale: {DRAFT[0]:.2f}$\times$, VR {DRAFT[1]:.4f}.',
-        color=MUTED, fontsize=9,
-    )
-
     OUTPUT.mkdir(exist_ok=True)
     for extension in ('pdf', 'svg', 'png'):
         destination = OUTPUT / f'quality_speed_tradeoff.{extension}'
