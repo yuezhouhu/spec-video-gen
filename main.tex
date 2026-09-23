@@ -645,18 +645,22 @@ blocks.
 \end{table}
 
 \paragraph{What the hybrid buys.}
-The two mechanisms \texttt{SDVG}-hybrid adds are ablated separately at
-$\tau{=}{-}1.0$, starting from the same forced block~0
-(Table~\ref{tab:hybrid}).
+Table~\ref{tab:hybrid} lists the full configuration first, then switches
+the cascade off and varies one factor at a time---the stitching depth
+$k$, whether block~0 is stitched too, and the routing threshold---so each
+mechanism can be read off on its own.
 
 \begin{table}[t]
   \caption{%
     \textbf{\texttt{SDVG}-hybrid ablations.}
     1003 MovieGenVideoBench prompts, $832{\times}480$, 9 blocks/video,
-    min-frame ImageReward, $\tau{=}{-}1.0$.
+    min-frame ImageReward.
     $k$ is the number of denoising steps a rejected block takes from the
     drafter rather than from the target.
     Retention is VisionReward relative to target-only (0.0788).
+    The default row is the full configuration; the groups below switch off
+    the cascade and vary one factor at a time, all at $\tau{=}{-}1.0$
+    unless the row names another threshold.
   }
   \label{tab:hybrid}
   \centering
@@ -667,7 +671,10 @@ $\tau{=}{-}1.0$, starting from the same forced block~0
     \midrule
     Target-only & 0.0788 & 97.0 & 1.00$\times$ & 100.0\% \\
     \midrule
-    \multicolumn{5}{l}{\textit{Step-level stitching, block~0 protected}} \\
+    \textbf{\texttt{SDVG}-hybrid ($k{=}3$, cascade, ours)}
+      & \textbf{0.0764} & \textbf{49.5} & \textbf{1.96$\times$} & \textbf{96.9\%} \\
+    \midrule
+    \multicolumn{5}{l}{\textit{Stitching depth (block~0 protected)}} \\
     $k{=}2$ & 0.0756 & 56.2 & 1.73$\times$ & 95.9\% \\
     $k{=}3$ & \textbf{0.0763} & 51.7 & 1.88$\times$ & \textbf{96.9\%} \\
     $k{=}4$ & 0.0752 & 52.5 & 1.85$\times$ & 95.5\% \\
@@ -677,9 +684,11 @@ $\tau{=}{-}1.0$, starting from the same forced block~0
     $k{=}3$ & 0.0677 & 51.6 & 1.88$\times$ & 85.9\% \\
     $k{=}4$ & 0.0646 & 46.7 & 2.08$\times$ & 82.0\% \\
     \midrule
-    \multicolumn{5}{l}{\textit{On-demand cascade ($k{=}3$, block~0 protected)}} \\
-    Cascade off (the $k{=}3$ row) & 0.0763 & 51.7 & 1.88$\times$ & 96.9\% \\
-    Cascade on  & 0.0764 & 49.5 & 1.96$\times$ & 96.9\% \\
+    \multicolumn{5}{l}{\textit{No cascade, varying the threshold ($k{=}3$, block~0 protected)}} \\
+    $\tau{=}{-}0.7$ & 0.0766 & 54.3 & 1.79$\times$ & 97.2\% \\
+    $\tau{=}{-}1.0$ & 0.0763 & 51.7 & 1.88$\times$ & 96.9\% \\
+    $\tau{=}{-}1.5$ & 0.0760 & 49.1 & 1.97$\times$ & 96.4\% \\
+    $\tau{=}{-}2.0$ & 0.0758 & 49.3 & 1.97$\times$ & 96.2\% \\
     \bottomrule
   \end{tabular}
 \end{table}
@@ -715,6 +724,11 @@ ${1.96\times}$) at unchanged VisionReward and retention.
 The band narrows as the threshold loosens---from $11.5\%$ of blocks at
 $\tau{=}{-}0.7$ to $3.6\%$ at $\tau{=}{-}2.0$---so the saving scales with
 how conservative the operating point is.
+Re-sweeping the threshold with the cascade switched off does not recover
+the same operating point: those rows span 0.0758--0.0766 VisionReward at
+49.1--54.3\,s, so matching the cascade's quality costs at least another
+$2.2$\,s ($\tau{=}{-}0.7$ at 54.3\,s), and the thresholds that run as fast
+as it sit $0.0004$--$0.0006$ lower.
 
 \section{Limitations}
 
