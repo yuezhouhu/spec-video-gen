@@ -409,7 +409,7 @@ off-the-shelf text-image reward model, to score decoded draft frames.
 
 \paragraph{Generation protocol.}
 Each video consists of $B{=}9$ autoregressive blocks. Each block corresponds to 3 latent frames (27 latent frames in total). The causal VAE
-decoder produce $9$ pixel frames for the first video block and $12$ pixel frames per later video block at $832 \times 480$ resolution.
+decoder produces $9$ pixel frames for the first video block and $12$ pixel frames per later video block at $832 \times 480$ resolution.
 All runs use a fixed random seed (42) for reproducibility.
 
 \paragraph{Hardware and implementation.}
@@ -455,8 +455,9 @@ two boundary baselines.
     Speedup is relative to target-only.
     Accept rate is over all nine blocks, so the always-rejected block~0
     counts as a rejection.
-    The \texttt{SDVG}-hybrid row combines step-level stitching
-    ($k{=}3$, block~0 protected) with on-demand cascade scoring.
+    Every \texttt{SDVG}-hybrid row stitches $k{=}3$ denoising steps of a
+    rejected block and scores a four-frame cascade proxy, with block~0
+    left to the target; the rows differ only in the routing threshold.
   }
   \label{tab:main}
   \centering
@@ -476,8 +477,11 @@ two boundary baselines.
     \texttt{SDVG} ($\tau{=}{-}2.0$)            & 0.0756 & 47.4 & 2.05$\times$ & 87.5\% \\
     \texttt{SDVG} ($\tau{=}{-}2.5$)            & 0.0754 & 46.4 & 2.09$\times$ & 88.9\% \\
     \midrule
-    \texttt{SDVG}-hybrid ($k{=}3$, $\tau{=}{-}1.0$, cascade)
-                                      & 0.0764 & 49.5 & 1.96$\times$ & ---    \\
+    \multicolumn{5}{l}{\textit{\texttt{SDVG}-hybrid ($k{=}3$, cascade, block~0 protected)}} \\
+    \texttt{SDVG}-hybrid ($\tau{=}{-}0.7$)     & 0.0772 & 51.6 & 1.88$\times$ & ---    \\
+    \texttt{SDVG}-hybrid ($\tau{=}{-}1.0$)     & 0.0764 & 49.5 & 1.96$\times$ & ---    \\
+    \texttt{SDVG}-hybrid ($\tau{=}{-}1.5$)     & 0.0759 & 48.2 & 2.01$\times$ & ---    \\
+    \texttt{SDVG}-hybrid ($\tau{=}{-}2.0$)     & 0.0751 & 46.1 & 2.11$\times$ & ---    \\
     \midrule
     Draft-only                        & 0.0644 & 25.7 & 3.77$\times$ & ---    \\
     \bottomrule
