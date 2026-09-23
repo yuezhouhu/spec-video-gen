@@ -645,10 +645,11 @@ blocks.
 \end{table}
 
 \paragraph{What the hybrid buys.}
-Table~\ref{tab:hybrid} lists the full configuration first, then switches
-the cascade off and varies one factor at a time---the stitching depth
-$k$, whether block~0 is stitched too, and the routing threshold---so each
-mechanism can be read off on its own.
+Table~\ref{tab:hybrid} lists the full configuration first, then walks
+through one factor at a time---the stitching depth $k$, whether block~0 is
+stitched too, and the routing threshold, with the cascade column giving
+the on/off pair at each threshold---so each mechanism can be read off on
+its own.
 
 \begin{table}[t]
   \caption{%
@@ -664,34 +665,34 @@ mechanism can be read off on its own.
   \label{tab:hybrid}
   \centering
   \setlength{\tabcolsep}{10pt}
-  \begin{tabular}{lcccc}
+  \begin{tabular}{lccccc}
     \toprule
-    Method & VR $\uparrow$ & Time (s) & Speedup & Retention \\
+    Method & Cascade & VR $\uparrow$ & Time (s) & Speedup & Retention \\
     \midrule
-    Target-only & 0.0788 & 97.0 & 1.00$\times$ & 100.0\% \\
+    Target-only & --- & 0.0788 & 97.0 & 1.00$\times$ & 100.0\% \\
     \midrule
-    \textbf{\texttt{SDVG}-hybrid ($k{=}3$, cascade, ours)}
-      & \textbf{0.0764} & \textbf{49.5} & \textbf{1.96$\times$} & \textbf{96.9\%} \\
+    \textbf{\texttt{SDVG}-hybrid ($k{=}3$, ours)}
+      & on  & \textbf{0.0764} & \textbf{49.5} & \textbf{1.96$\times$} & \textbf{96.9\%} \\
     \midrule
-    \multicolumn{5}{l}{\textit{Stitching depth ($\tau{=}{-}0.7$, block~0 protected, cascade off)}} \\
-    $k{=}2$ & 0.0756 & 56.2 & 1.73$\times$ & 95.9\% \\
-    $k{=}3$ & \textbf{0.0766} & 54.3 & 1.79$\times$ & \textbf{97.2\%} \\
-    $k{=}4$ & 0.0752 & 52.5 & 1.85$\times$ & 95.5\% \\
+    \multicolumn{6}{l}{\textit{Stitching depth ($\tau{=}{-}0.7$, block~0 protected)}} \\
+    $k{=}2$ & off & 0.0756 & 56.2 & 1.73$\times$ & 95.9\% \\
+    $k{=}3$ & off & \textbf{0.0766} & 54.3 & 1.79$\times$ & \textbf{97.2\%} \\
+    $k{=}4$ & off & 0.0752 & 52.5 & 1.85$\times$ & 95.5\% \\
     \midrule
-    \multicolumn{5}{l}{\textit{Stitching block~0 as well ($\tau{=}{-}0.7$, cascade off)}} \\
-    $k{=}2$ & 0.0688 & 58.9 & 1.65$\times$ & 87.3\% \\
-    $k{=}3$ & 0.0677 & 51.6 & 1.88$\times$ & 85.9\% \\
-    $k{=}4$ & 0.0646 & 46.7 & 2.08$\times$ & 82.0\% \\
+    \multicolumn{6}{l}{\textit{Stitching block~0 as well ($\tau{=}{-}0.7$)}} \\
+    $k{=}2$ & off & 0.0688 & 58.9 & 1.65$\times$ & 87.3\% \\
+    $k{=}3$ & off & 0.0677 & 51.6 & 1.88$\times$ & 85.9\% \\
+    $k{=}4$ & off & 0.0646 & 46.7 & 2.08$\times$ & 82.0\% \\
     \midrule
-    \multicolumn{5}{l}{\textit{Varying the threshold ($k{=}3$, block~0 protected)}} \\
-    $\tau{=}{-}0.7$, cascade off & 0.0766 & 54.3 & 1.79$\times$ & 97.2\% \\
-    $\tau{=}{-}0.7$, cascade on  & 0.0772 & 51.6 & 1.88$\times$ & 98.0\% \\
-    $\tau{=}{-}1.0$, cascade off & 0.0763 & 51.7 & 1.88$\times$ & 96.9\% \\
-    $\tau{=}{-}1.0$, cascade on  & 0.0764 & 49.5 & 1.96$\times$ & 96.9\% \\
-    $\tau{=}{-}1.5$, cascade off & 0.0760 & 49.1 & 1.97$\times$ & 96.4\% \\
-    $\tau{=}{-}1.5$, cascade on  & 0.0759 & 48.2 & 2.01$\times$ & 96.3\% \\
-    $\tau{=}{-}2.0$, cascade off & 0.0758 & 49.3 & 1.97$\times$ & 96.2\% \\
-    $\tau{=}{-}2.0$, cascade on  & 0.0751 & 46.1 & 2.11$\times$ & 95.3\% \\
+    \multicolumn{6}{l}{\textit{Varying the threshold ($k{=}3$, block~0 protected)}} \\
+    $\tau{=}{-}0.7$ & off & 0.0766 & 54.3 & 1.79$\times$ & 97.2\% \\
+    $\tau{=}{-}0.7$ & on  & 0.0772 & 51.6 & 1.88$\times$ & 98.0\% \\
+    $\tau{=}{-}1.0$ & off & 0.0763 & 51.7 & 1.88$\times$ & 96.9\% \\
+    $\tau{=}{-}1.0$ & on  & 0.0764 & 49.5 & 1.96$\times$ & 96.9\% \\
+    $\tau{=}{-}1.5$ & off & 0.0760 & 49.1 & 1.97$\times$ & 96.4\% \\
+    $\tau{=}{-}1.5$ & on  & 0.0759 & 48.2 & 2.01$\times$ & 96.3\% \\
+    $\tau{=}{-}2.0$ & off & 0.0758 & 49.3 & 1.97$\times$ & 96.2\% \\
+    $\tau{=}{-}2.0$ & on  & 0.0751 & 46.1 & 2.11$\times$ & 95.3\% \\
     \bottomrule
   \end{tabular}
 \end{table}
