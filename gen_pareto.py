@@ -4,8 +4,9 @@ Usage: python3 gen_pareto.py
 Requires matplotlib. Writes vector PDF/SVG and a 400-dpi PNG to figures/.
 
 Values are transcribed from Table 1 (1003 MovieGenVideoBench prompts,
-832x480, seed 42). The original log-speedup scale and every measured point
-are preserved. Target-only is a quality reference; draft-only is off-scale.
+832x480, seed 42). Speedup runs linearly from 1.4x to 2.2x, which covers
+every measured point. Target-only is a quality reference; draft-only is
+off-scale.
 """
 from pathlib import Path
 
@@ -92,9 +93,7 @@ def main():
                      [(9, 10, 'left'), (9, 10, 'left'),
                       (-12, 0, 'right'), (8, -8, 'left')], ORANGE)
 
-    # Preserve the original logarithmic horizontal axis, shown explicitly.
-    ax.set_xscale('log')
-    ax.set_xlim(1.4, 2.25)
+    ax.set_xlim(1.4, 2.2)
     ax.set_ylim(0.07465, 0.07915)
     ax.xaxis.set_major_locator(FixedLocator([1.4, 1.6, 1.8, 2.0, 2.2]))
     ax.xaxis.set_major_formatter(FixedFormatter(['1.4', '1.6', '1.8', '2.0', '2.2']))
