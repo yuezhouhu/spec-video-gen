@@ -215,7 +215,7 @@ Diffusion-based video models have advanced from pixel-space approaches
 \citep{ho2022videodiffusionmodels} to large latent transformer architectures
 \citep{videoworldsimulators2024,polyak2024movie}.
 Inference efficiency has been improved primarily through step distillation
-\citep{yin2024onestepdiffusiondistributionmatching,zhang2025turbodiffusion,wang2024phased} and GPU kernel optimization~\citep{zhang2025sageattention,zhang2024sageattention2,zhang2025sageattention2++,zhang2025sageattention3,zhangspargeattention,zhang2025sla}. They are all orthogonal to \texttt{SDVG}.
+\citep{yin2024onestepdiffusiondistributionmatching,zhang2025turbodiffusion,wang2024phased} and GPU kernel optimization~\citep{zhang2025sageattention3,zhangspargeattention}. They are all orthogonal to \texttt{SDVG}.
 
 
 % , and
@@ -848,16 +848,16 @@ reward-guided inference-time compute allocation for video generation.
 
 (This section is \textbf{required} and does not count toward the page limit.)
 
-% TODO: replace with the actual disclosure before submission.
-In this work, we used generative AI tools for [tasks with required disclosure].
-We have not used generative AI tools for [other tasks with required disclosure],
-and [the rest of the required disclosure tasks] are not applicable to this work.
-Additionally, we used generative AI tools for [tasks with recommended
-disclosure]. We have reviewed all AI-assisted work. [Elaborate. For example, ``we
-checked LLM-generated research ideas for potential plagiarism through a manual
-literature survey'', ``LLM-generated code was verified and tested for correctness
-by 2 authors'', etc.]. We take responsibility for the final content of this work,
-including text, claims or artifacts produced with the aid of generative AI.
+In this work, we used generative AI tools to draft sections of the paper and
+to aid and polish the writing. We did not use generative AI tools to produce,
+alter, or select any experimental result reported here. Additionally, we used
+generative AI tools for research ideation and execution, including the code
+that generates our figures and runs the analyses. All AI-assisted work was
+reviewed and verified by the authors: every generated passage was checked
+against our own results and claims, and the code was tested against
+independently computed statistics. We take responsibility for the final
+content of this work, including text, claims and artifacts produced with the
+aid of generative AI.
 
 % ---- Ethics and Reproducibility statements, commented out for now.
 % ---- Delete the \iffalse/\fi pair to restore them.
@@ -889,12 +889,44 @@ materials that support reproduction of the results.]
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% \appendix
-%
-% \section{Technical Appendix}
-%
-% Additional results, figures, and analysis may be placed here. There is no
-% page limit for appendices, but reviewers are not required to read them.
+\appendix
+
+\section{Additional Qualitative Results}
+\label{app:qualitative}
+
+Figures~\ref{fig:app-qual-1} and~\ref{fig:app-qual-2} repeat the
+comparison of Figure~\ref{fig:teaser} on four further prompts drawn from
+the same evaluation. Each row is one method---draft-only,
+\texttt{SDVG} ($\tau{=}{-}0.7$), \texttt{SDVG}-hybrid ($k{=}3$,
+$\tau{=}{-}1.0$, cascade, block~0 left to the target) and
+target-only---and each cell shows four uniformly sampled frames of a
+single generated video, so a row can be read left to right as the video
+plays.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/appendix_qualitative_1}
+  \caption{%
+    Qualitative comparison on two further MovieGenVideoBench prompts.
+    The draft's maple forest drifts in composition and saturation while
+    both \texttt{SDVG} variants hold the target's palette, and on the
+    basketball clip the draft loses the hoop and the player's limbs
+    entirely.
+  }
+  \label{fig:app-qual-1}
+\end{figure}
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=\linewidth]{figures/appendix_qualitative_2}
+  \caption{%
+    Qualitative comparison on two further MovieGenVideoBench prompts.
+    These two stress fine detail: the kintsugi cracks on the glass
+    tortoise and the density of the market stalls both degrade in the
+    draft and recover in the regenerated blocks.
+  }
+  \label{fig:app-qual-2}
+\end{figure}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
