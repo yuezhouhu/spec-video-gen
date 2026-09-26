@@ -20,8 +20,9 @@ import matplotlib.image as mpimg
 import numpy as np
 import os
 
-figdir = '/rscratch/yuezhouhu/realtime-video.paper/figures/appendix_frames'
-outdir = '/rscratch/yuezhouhu/realtime-video.paper/figures'
+root = os.path.dirname(os.path.abspath(__file__))
+figdir = os.path.join(root, 'figures', 'appendix_frames')
+outdir = os.path.join(root, 'figures')
 
 methods = ['draft', 'sdvg', 'hybrid', 'target']
 method_labels = ['Draft-only', 'SDVG', 'SDVG-hybrid', 'Target-only']
@@ -37,7 +38,7 @@ FIGS = [
 ]
 
 for n, prompt_ids, texts in FIGS:
-    fig, axes = plt.subplots(len(methods), len(prompt_ids), figsize=(10, 6.0))
+    fig, axes = plt.subplots(len(methods), len(prompt_ids), figsize=(10, 3.8))
     for i, method in enumerate(methods):
         for j, pid in enumerate(prompt_ids):
             imgs = [mpimg.imread(os.path.join(figdir, f'{method}_{pid}_f{f}.png'))

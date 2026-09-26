@@ -6,8 +6,9 @@ import matplotlib.image as mpimg
 import numpy as np
 import os
 
-figdir = '/rscratch/yuezhouhu/realtime-video.paper/figures/teaser_frames'
-outdir = '/rscratch/yuezhouhu/realtime-video.paper/figures'
+root = os.path.dirname(os.path.abspath(__file__))
+figdir = os.path.join(root, 'figures', 'teaser_frames')
+outdir = os.path.join(root, 'figures')
 
 prompts = ['003', '000']  # Big Sur drone, Tokyo street
 methods = ['draft', 'rsvg', 'hybrid', 'target']
@@ -17,7 +18,7 @@ frames = [0, 8, 16, 24]
 nrows = len(methods)   # 4: draft, rsvg, hybrid, target
 ncols = len(prompts)   # 2: two videos
 
-fig, axes = plt.subplots(nrows, ncols, figsize=(10, 6.0))
+fig, axes = plt.subplots(nrows, ncols, figsize=(10, 3.8))
 
 for i, method in enumerate(methods):
     for j, prompt_id in enumerate(prompts):

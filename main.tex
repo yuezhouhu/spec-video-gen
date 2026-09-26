@@ -24,6 +24,7 @@
 \usepackage{subcaption}
 \usepackage{float}
 \usepackage{afterpage}
+\usepackage{paralist}
 
 % ──────────────────────────── Algorithm pseudo-code ───────────────────────
 % Pseudo-code helpers (works in regular text)
@@ -139,17 +140,12 @@ Requiring no retraining or architectural modifications, \texttt{SDVG} serves as 
     \includegraphics[width=\linewidth]{figures/teaser}
     \caption{%
       \textbf{Qualitative comparison on MovieGenVideoBench.}
-      Each row shows 4 uniformly sampled frames from a generated video.
-      Draft-only (top) is fast but produces lower-fidelity output;
-      Target-only (bottom) achieves the highest quality at the cost of
-      slow inference.
-      \texttt{SDVG} ($\tau{=}{-}0.7$) closely matches target quality while
-      running \textbf{1.59$\times$ faster}, and \texttt{SDVG}-hybrid
-      ($k{=}3$, $\tau{=}{-}1.0$, cascade) matches it at
-      \textbf{1.96$\times$}.
-      Prompts: (top) \textit{``Drone view of waves crashing against the rugged
-      cliffs along Big Sur\ldots''};
-      (bottom) \textit{``A stylish woman walks down a Tokyo street\ldots''}.
+      Each cell shows four uniformly sampled frames. Rows compare
+      draft-only, \texttt{SDVG}, \texttt{SDVG}-hybrid, and target-only;
+      columns show Big Sur and Tokyo street prompts.
+      \texttt{SDVG} ($\tau{=}{-}0.7$) closely matches target quality at
+      \textbf{1.59$\times$} speedup; \texttt{SDVG}-hybrid
+      ($k{=}3$, $\tau{=}{-}1.0$, cascade) reaches \textbf{1.96$\times$}.
     }
     \label{fig:teaser}
   \end{figure}%
@@ -216,11 +212,11 @@ However, enabling seamless cooperation between large and small models in video s
 Crucially, a fundamental domain gap prevents the direct application of LLM speculative decoding to video: while classical speculative decoding verifies drafts via exact token probability distributions \citep{leviathan2023fastinferencetransformersspeculative}, video blocks are continuous, high-dimensional spatiotemporal tensors lacking discrete logits. Thus, standard token-level acceptance criteria are strictly inapplicable, leaving \emph{speculative decoding for autoregressive video} an open challenge.
 
 In this work, we propose \textbf{Speculative Decoding for Autoregressive Video Generation} (\textbf{\texttt{SDVG}}), a training-free, plug-and-play framework that requires no architectural modifications to either the draft or target models. Our primary contributions are summarized as follows:
-\begin{itemize}
+\begin{compactitem}[\textbullet]
   \item \textbf{Pioneering Speculative Decoding for Autoregressive Video}: To the best of our knowledge, \texttt{SDVG} is the \textbf{first} training-free speculative decoding framework tailored for autoregressive video diffusion. By dynamically routing video blocks via reward-guided quality metrics, \texttt{SDVG} achieves a $1.59\times$ speedup while preserving $98.1\%$ of the target model's visual quality—demonstrating that plain reward routing suffices without complex trajectory engineering.
   \item \textbf{Video-Specific Routing Design}: We identify three critical design choices essential for effective continuous-domain verification: (1) a calibration-free quality threshold acting as a robust speed--quality control knob, (2) mandatory target-based first-block generation to anchor scene composition, and (3) a worst-frame quality scoring strategy that exposes transient single-frame artifacts obscured by block-level spatial averaging.
   \item \textbf{Pushing Acceleration Limits via \texttt{SDVG}-Hybrid}: We further extend our framework into \texttt{SDVG}-hybrid by synergizing block-level speculation with step-level denoising trajectory stitching. By delegating initial denoising steps of rejected blocks to the draft model and incorporating an on-demand evaluation cascade, \texttt{SDVG}-hybrid achieves up to a $1.96\times$ speedup with $96.9\%$ quality retention, significantly outperforming aggressive thresholding on \texttt{SDVG} alone.
-\end{itemize}
+\end{compactitem}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Background and Related Work}
@@ -506,23 +502,7 @@ In this section, we empirically evaluate the performance and efficiency of \text
 \subsection{Experimental Setup}
 \label{sec:setup}
 
-\paragraph{Base Models and Router Architecture.}
-We evaluate our framework on a pair of autoregressive video diffusion models built on the Wan2.1 backbone \citep{wan2025wanopenadvancedlargescale}. The \emph{target model} $\mathcal{T}$ is Krea Realtime Video 14B \citep{krea_realtime_14b}, distilled from Wan2.1-T2V-14B via Self-Forcing \citep{huang2025selfforcingbridgingtraintest}. The \emph{draft model} $\mathcal{D}$ is the Wan2.1-T2V-1.3B Self-Forcing model. Both architectures share a causal attention backbone with key-value (KV) caching driven by 3D RoPE positional embeddings, executing $S=4$ denoising steps per block with the schedule $\mathbf{t} = [1000, 937, 833, 625, 0]$. For candidate verification, the router utilizes ImageReward \citep{xu2023imagerewardlearningevaluatinghuman}, an off-the-shelf text-to-image reward model, to score decoded draft frames in the pixel domain.
-
-\paragraph{Generation Protocol.}
-Each synthesized video consists of $B=9$ autoregressive blocks, corresponding to 27 latent frames in total (3 latent frames per block). The causal VAE decoder maps these to $9$ pixel frames for the initial anchor block ($b=0$) and $12$ pixel frames for each subsequent block at $832 \times 480$ resolution. To guarantee strict reproducibility, all experimental runs use a fixed random seed ($42$).
-
-\paragraph{Hardware and System Implementation.}
-All experiments are conducted on two NVIDIA RTX A6000 GPUs ($48\text{~GB}$ VRAM each). GPU~0 hosts the diffusion transformers ($\mathcal{T}$ and $\mathcal{D}$), while GPU~1 hosts the text encoder (UMT5-XXL), causal VAE decoder, and ImageReward router. To eliminate verification bottlenecks, we employ asynchronous CUDA streams that overlap cross-device tensor transfers and reward computation with GPU~0's denoising process, effectively hiding scoring latency.
-
-\paragraph{Evaluation Benchmarks and Metrics.}
-We construct our evaluation set from MovieGenVideoBench \citep{polyak2024movie}, comprising $1{,}003$ text prompts spanning diverse visual categories (e.g., landscapes, animals, human activities, and cinematic sequences). Visual synthesis quality is evaluated using VisionReward \citep{xu2026visionrewardfinegrainedmultidimensionalhuman} and EvalCrafter \citep{liu2024evalcrafterbenchmarkingevaluatinglarge}. System efficiency is measured by wall-clock latency per video (excluding model loading and warmup), from which relative throughput speedup over target-only generation is derived.
-
-\paragraph{Baselines.}
-We benchmark \texttt{SDVG} and \texttt{SDVG}-hybrid against two boundary baselines:
-(1) \emph{Draft-only} ($\mathcal{D}$-only), where all blocks are generated exclusively by the 1.3B draft model (representing maximum speed but lower visual quality); and
-(2) \emph{Target-only} ($\mathcal{T}$-only), where all blocks are generated by the 14B target model (representing upper-bound visual quality at full computational cost).
-\texttt{SDVG} and \texttt{SDVG}-hybrid operate along the Pareto frontier between these extremes by sweeping the quality acceptance threshold $\threshold$, the number of stitched denoising steps $k$, and the cascade margin $\delta$.
+We pair a Krea Realtime Video 14B target \citep{krea_realtime_14b} with a Wan2.1-T2V-1.3B Self-Forcing draft and use ImageReward \citep{xu2023imagerewardlearningevaluatinghuman} for routing. On $1{,}003$ MovieGenVideoBench prompts \citep{polyak2024movie}, each method generates nine video blocks at $832\times480$ using two NVIDIA RTX A6000 GPUs. We report VisionReward, EvalCrafter, latency per video, and speedup over target-only; draft-only and target-only bound the quality--speed range. Appendix~\ref{app:setup} provides the denoising schedule, decoding protocol, hardware configuration, baseline definitions, and reproducibility details.
 
 
 % \subsection{Main Results}
@@ -658,18 +638,24 @@ Integrating step-level trajectory stitching ($k=3$) and on-demand cascade routin
 
 \begin{figure}[t]
   \centering
-  \includegraphics[width=0.7\linewidth]{figures/quality_speed_tradeoff}
-  \caption{%
-    \textbf{Quality--speed Pareto curve.}
-    VisionReward against speedup over target-only for the threshold sweeps
-    of \texttt{SDVG} and \texttt{SDVG}-hybrid; the dashed line is
-    target-only.
-    The \texttt{SDVG}-hybrid curve sits above the \texttt{SDVG} curve
-    through $2.0\times$, with the gap widest at the conservative end:
-    hybrid $\tau{=}{-}0.7$ matches \texttt{SDVG} $\tau{=}{-}0.7$ quality
-    9.3\,s sooner.
-  }
-  \label{fig:pareto}
+  \begin{minipage}[c]{0.34\linewidth}
+    \captionsetup{justification=raggedright,singlelinecheck=false}
+    \caption{%
+      \textbf{Quality--speed Pareto curve.}
+      VisionReward against speedup over target-only for the threshold sweeps
+      of \texttt{SDVG} and \texttt{SDVG}-hybrid; the dashed line is
+      target-only.
+      The \texttt{SDVG}-hybrid curve sits above the \texttt{SDVG} curve
+      through $2.0\times$, with the gap widest at the conservative end:
+      hybrid $\tau{=}{-}0.7$ matches \texttt{SDVG} $\tau{=}{-}0.7$ quality
+      9.3\,s sooner.
+    }
+    \label{fig:pareto}
+  \end{minipage}\hspace{0.04\linewidth}
+  \begin{minipage}[c]{0.50\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{figures/quality_speed_tradeoff}
+  \end{minipage}
 \end{figure}
 
 % \subsection{Ablation Studies}
@@ -1034,6 +1020,28 @@ materials that support reproduction of the results.]
 
 \appendix
 
+\section{Experimental Setup Details}
+\label{app:setup}
+
+\paragraph{Base Models and Router Architecture.}
+We evaluate our framework on a pair of autoregressive video diffusion models built on the Wan2.1 backbone \citep{wan2025wanopenadvancedlargescale}. The \emph{target model} $\mathcal{T}$ is Krea Realtime Video 14B \citep{krea_realtime_14b}, distilled from Wan2.1-T2V-14B via Self-Forcing \citep{huang2025selfforcingbridgingtraintest}. The \emph{draft model} $\mathcal{D}$ is the Wan2.1-T2V-1.3B Self-Forcing model. Both architectures share a causal attention backbone with key-value (KV) caching driven by 3D RoPE positional embeddings, executing $S=4$ denoising steps per block with the schedule $\mathbf{t} = [1000, 937, 833, 625, 0]$. For candidate verification, the router utilizes ImageReward \citep{xu2023imagerewardlearningevaluatinghuman}, an off-the-shelf text-to-image reward model, to score decoded draft frames in the pixel domain.
+
+\paragraph{Generation Protocol.}
+Each synthesized video consists of $B=9$ autoregressive blocks, corresponding to 27 latent frames in total (3 latent frames per block). The causal VAE decoder maps these to $9$ pixel frames for the initial anchor block ($b=0$) and $12$ pixel frames for each subsequent block at $832 \times 480$ resolution. To guarantee strict reproducibility, all experimental runs use a fixed random seed ($42$).
+
+\paragraph{Hardware and System Implementation.}
+All experiments are conducted on two NVIDIA RTX A6000 GPUs ($48\text{~GB}$ VRAM each). GPU~0 hosts the diffusion transformers ($\mathcal{T}$ and $\mathcal{D}$), while GPU~1 hosts the text encoder (UMT5-XXL), causal VAE decoder, and ImageReward router. To eliminate verification bottlenecks, we employ asynchronous CUDA streams that overlap cross-device tensor transfers and reward computation with GPU~0's denoising process, effectively hiding scoring latency.
+
+\paragraph{Evaluation Benchmarks and Metrics.}
+We construct our evaluation set from MovieGenVideoBench \citep{polyak2024movie}, comprising $1{,}003$ text prompts spanning diverse visual categories (e.g., landscapes, animals, human activities, and cinematic sequences). Visual synthesis quality is evaluated using VisionReward \citep{xu2026visionrewardfinegrainedmultidimensionalhuman} and EvalCrafter \citep{liu2024evalcrafterbenchmarkingevaluatinglarge}. System efficiency is measured by wall-clock latency per video (excluding model loading and warmup), from which relative throughput speedup over target-only generation is derived.
+
+\paragraph{Baselines.}
+We benchmark \texttt{SDVG} and \texttt{SDVG}-hybrid against two boundary baselines:
+(1) \emph{Draft-only} ($\mathcal{D}$-only), where all blocks are generated exclusively by the 1.3B draft model (representing maximum speed but lower visual quality); and
+(2) \emph{Target-only} ($\mathcal{T}$-only), where all blocks are generated by the 14B target model (representing upper-bound visual quality at full computational cost).
+\texttt{SDVG} and \texttt{SDVG}-hybrid operate along the Pareto frontier between these extremes by sweeping the quality acceptance threshold $\threshold$, the number of stitched denoising steps $k$, and the cascade margin $\delta$.
+
+\clearpage
 \section{Additional Qualitative Results}
 \label{app:qualitative}
 
@@ -1046,7 +1054,7 @@ target-only---and each cell shows four uniformly sampled frames of a
 single generated video, so a row can be read left to right as the video
 plays.
 
-\begin{figure}[h]
+\begin{figure}[!htbp]
   \centering
   \includegraphics[width=\linewidth]{figures/appendix_qualitative_1}
   \caption{%
@@ -1059,7 +1067,7 @@ plays.
   \label{fig:app-qual-1}
 \end{figure}
 
-\begin{figure}[h]
+\begin{figure}[!htbp]
   \centering
   \includegraphics[width=\linewidth]{figures/appendix_qualitative_2}
   \caption{%
