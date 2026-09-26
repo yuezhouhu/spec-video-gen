@@ -48,7 +48,7 @@
 \newcommand{\threshold}{\tau}
 \newcommand{\alphaeff}{\alpha_{\mathrm{eff}}}
 
-\hypersetup{hidelinks}
+\newcommand{\haocheng}[1]{\noindent{\textcolor{red}{\bf \fbox{Haocheng} {\it#1}}}}
 
 \title{Speculative Decoding for Autoregressive \\ Video Generation}
 
@@ -102,9 +102,9 @@ verification with an image-quality router: a 1.3B drafter proposes each
 block in four denoising steps, the block is VAE-decoded and scored by
 ImageReward using \emph{worst-frame aggregation}, and a fixed threshold
 sends it to the 14B target's KV cache or back to the target for
-regeneration. The first block is always regenerated, which anchors scene
+regeneration \haocheng{This sentence needs tuning}. The first block is always regenerated, which anchors scene
 composition, and the threshold alone traces a smooth quality--speed
-frontier.
+frontier. \haocheng{This sentence needs tuning}
 We further introduce \texttt{SDVG}-hybrid, which hands the drafter's
 first three denoising steps to rejected blocks and resolves most routing
 decisions from a four-frame proxy.
@@ -161,7 +161,7 @@ achieves real-time video output on a single GPU.
 
 Despite this structural efficiency advantage, state-of-the-art
 autoregressive video models are built on 10B+ parameter transformers, which is still computationally demanding.
-For example, frontier open-source 14B autoregressive video generation models (such as \citet{krea_realtime_14b})
+For example, frontier open-source 14B autoregressive video generation models (\citet{krea_realtime_14b})
 require high-end GPUs (e.g. NVIDIA B200) to achieve real-time throughput.
 Meanwhile, compact 1B-scale video models, such as
  \citet{wan2025wanopenadvancedlargescale}, run at less than one-quarter of the
@@ -181,7 +181,7 @@ especially well-suited to this paradigm, as each generated block is a
 self-contained unit that can be evaluated before being committed to the
 KV cache, making per-block routing a natural design choice.
 
-However, Making large and small models cooperate effectively is non-trivial.
+However, making large and small models cooperate effectively is non-trivial.
 Recent work has explored related ideas. T-Stitch \citep{pan2024tstitchacceleratingsamplingpretrained},
 SRDiffusion \citep{cheng2025srdiffusionacceleratevideodiffusion}, and HybridStitch \citep{sun2026hybridstitch} all propose splitting the denoising trajectory between models at the noise-step level: the small model handles certain steps and the large model handles others. MoDM \citep{xia2025modmefficientservingimage} routes entire generation requests between models at the serving system level based on a caching mechanism. While effective in their respective settings, these approaches were not designed specifically for autoregressive video generation: T-Stitch, SRDiffusion, and HybridStitch all split the generation on the time step dimension rather than the block dimension, while MoDM relies on cache hits and lacks per-block
 quality guarantees. This makes their performance suboptimal on an autoregressive generation scenario.
@@ -268,6 +268,7 @@ replace the PRM with an image quality model as a block-level proxy.
     on rejected blocks the target resumes from step~$k$ of the schedule
     rather than from the initial noise, the earlier steps being taken
     from the drafter's trajectory. Block~0 is excluded from stitching.
+    \haocheng{This figure looks too AI-generated. Needs tuning}
   }
   \label{fig:pipeline}
 \end{figure}
@@ -845,8 +846,6 @@ reward-guided inference-time compute allocation for video generation.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection*{AI use statement}
-
-(This section is \textbf{required} and does not count toward the page limit.)
 
 In this work, we used generative AI tools to draft sections of the paper and
 to aid and polish the writing. We did not use generative AI tools to produce,
